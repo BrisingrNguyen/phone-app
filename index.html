@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#1e3a5f" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Finance" />
+<title>Finance · phone</title>
+<style>
+  :root{--navy:#1e3a5f;--blue:#2c5282;--soft:#eef3f8;--line:#d6e0ec;--ink:#1a2733;--muted:#6b7c93;
+    --green:#2f7a4f;--amber:#9a6b1f;--violet:#5b4b8a;--rose:#a13d5d;--card:#fff;}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--soft);color:var(--ink);line-height:1.45;padding-bottom:40px}
+  .header{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;padding:calc(14px + env(safe-area-inset-top)) 18px 14px}
+  .header h1{font-size:19px;font-weight:700}
+  .header .sub{font-size:12px;opacity:.85;margin-top:2px}
+  .wrap{max-width:560px;margin:0 auto;padding:0 14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 3px rgba(30,58,95,.05);padding:14px;margin-top:12px}
+  .h2{font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin:16px 2px 0}
+  input,select{border:1px solid var(--line);border-radius:9px;padding:11px 12px;font-size:15px;width:100%;background:#fff;color:var(--ink)}
+  button{border:none;border-radius:10px;padding:12px 16px;font-size:15px;font-weight:700;cursor:pointer}
+  .btn-primary{background:var(--blue);color:#fff;width:100%}
+  .btn-primary:disabled{opacity:.4}
+  .btn-line{background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 2px;border-bottom:1px solid var(--line);font-size:14px}
+  .row:last-child{border-bottom:none}
+  .big{font-size:30px;font-weight:700;color:var(--navy);text-align:center}
+  .muted{color:var(--muted)}
+  .small{font-size:12px}
+  .bar{height:7px;background:var(--soft);border-radius:5px;overflow:hidden;margin-top:4px}
+  .fill{height:100%;border-radius:5px}
+  .modes{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+  .mode{border:2px solid transparent;border-radius:12px;padding:9px 2px;text-align:center;background:var(--soft);color:var(--muted);font-weight:700;font-size:12px}
+  .mode span{display:block;font-size:17px;margin-bottom:1px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--ink)}
+  .green{color:var(--green)}.rose{color:var(--rose)}.amber{color:var(--amber)}
+  .banner{border:1px solid var(--line);border-left:4px solid var(--green);border-radius:12px;padding:10px 13px;font-size:13px;margin-top:12px;background:#fff}
+  .flexr{display:flex;gap:8px;align-items:center}
+  .stat{text-align:center}
+  .stat .l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .stat .v{font-size:15px;font-weight:700}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+  .hidden{display:none!important}
+  .tabs{display:flex;gap:6px;margin-top:12px}
+  .tab{flex:1;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px;text-align:center;font-weight:700;font-size:14px;color:var(--muted)}
+  .tab.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .final{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;margin-top:6px}
+  .final .n{font-size:34px;font-weight:800;color:var(--navy);text-align:center;line-height:1}
+  .decision{border-radius:12px;color:#fff;font-weight:800;font-size:15px;text-align:center;padding:12px 8px}
+</style>
+</head>
+<body>
+<div class="header"><div class="wrap" style="padding:0">
+  <h1>💶 Finance Command Center</h1>
+  <div class="sub" id="subtitle">phone companion — the laptop stays the source of truth</div>
+</div></div>
+<div class="wrap">
+
+  <!-- SETUP -->
+  <div id="setup" class="hidden">
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:8px">One-time connection</div>
+      <div class="small muted" style="margin-bottom:10px">Same four values as the laptop's Settings → Phone sync.</div>
+      <div style="display:grid;gap:8px">
+        <input id="s-url" placeholder="Project URL (https://xxxx.supabase.co)" autocapitalize="off" />
+        <input id="s-key" placeholder="anon public key" autocapitalize="off" />
+        <input id="s-email" type="email" placeholder="Email" autocapitalize="off" />
+        <input id="s-pass" type="password" placeholder="Password" />
+      </div>
+      <div id="s-error" class="small rose" style="margin-top:8px"></div>
+      <button class="btn-primary" style="margin-top:10px" onclick="connect()">Connect</button>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="app" class="hidden">
+    <div id="pending-banner" class="banner hidden" style="border-left-color:var(--amber)"></div>
+
+    <div class="tabs">
+      <button class="tab on" id="tab-btn-money" onclick="showTab('money')">💶 Money</button>
+      <button class="tab" id="tab-btn-trading" onclick="showTab('trading')">📈 Trading</button>
+    </div>
+
+    <!-- MONEY TAB -->
+    <div id="tab-money">
+      <div class="h2">Log money</div>
+      <div class="card">
+        <div class="modes" id="modes"></div>
+        <div class="chips" id="types"></div>
+        <div class="flexr" style="margin-top:10px">
+          <input id="amount" inputmode="decimal" placeholder="€ 0.00" style="font-size:18px;font-weight:700;flex:1" />
+          <input id="date" type="date" style="width:150px" />
+        </div>
+        <div class="flexr" style="margin-top:8px">
+          <select id="account" style="flex:1"></select>
+          <select id="toAccount" class="hidden" style="flex:1"></select>
+        </div>
+        <input id="note" placeholder="Note (optional)" style="margin-top:8px" />
+        <button class="btn-primary" id="logBtn" style="margin-top:10px" onclick="logIt()" disabled>Log it</button>
+        <div id="log-msg" class="small green" style="margin-top:7px"></div>
+      </div>
+
+      <div class="h2">At a glance <span id="freshness" class="muted" style="text-transform:none;letter-spacing:0"></span></div>
+      <div class="card">
+        <div class="big" id="networth">—</div>
+        <div class="small muted" style="text-align:center">net worth · Core FI <span id="corefi">—</span></div>
+        <div id="goals" style="margin-top:10px"></div>
+      </div>
+
+      <div class="h2">This month</div>
+      <div class="card"><div class="grid3" id="month"></div></div>
+
+      <div class="h2">Cash accounts</div>
+      <div class="card" id="accounts"></div>
+    </div>
+
+    <!-- TRADING TAB -->
+    <div id="tab-trading" class="hidden">
+      <div class="h2">Account <span id="trade-fresh" class="muted" style="text-transform:none;letter-spacing:0"></span></div>
+      <div class="card"><div class="grid3" id="trading"></div>
+        <div id="risk-note" class="small muted" style="margin-top:8px"></div>
+      </div>
+
+      <div class="h2">Position-size calculator</div>
+      <div class="card">
+        <div class="flexr">
+          <div style="flex:1"><div class="small muted">Entry</div><input id="c-entry" inputmode="decimal" placeholder="0.00" /></div>
+          <div style="flex:1"><div class="small muted">Stop</div><input id="c-stop" inputmode="decimal" placeholder="0.00" /></div>
+        </div>
+        <div class="chips" style="margin-top:10px">
+          <button class="chip" id="risk-green" onclick="setRisk('green')">🟢 1% · Green</button>
+          <button class="chip" id="risk-yellow" onclick="setRisk('yellow')">🟡 0.5% · Yellow</button>
+        </div>
+        <div class="final">
+          <div><div class="small muted" style="text-align:center">Final size</div><div class="n" id="c-size">0</div></div>
+          <div class="decision" id="c-decision" style="background:var(--muted)">Enter entry & stop</div>
+        </div>
+        <div class="grid3" style="margin-top:10px">
+          <div class="stat"><div class="l">Cash need</div><div class="v" id="c-cash">—</div></div>
+          <div class="stat"><div class="l">Risk €</div><div class="v" id="c-risk">—</div></div>
+          <div class="stat"><div class="l">Room left</div><div class="v" id="c-room">—</div></div>
+        </div>
+        <input id="c-instrument" placeholder="Instrument (e.g. AAPL)" style="margin-top:10px" />
+        <button class="btn-primary" id="c-log" style="margin-top:8px" onclick="logTrade()" disabled>Write this trade</button>
+        <div id="c-msg" class="small green" style="margin-top:7px"></div>
+        <div class="small muted" style="margin-top:8px">The calculator counts trades you've queued here that the laptop hasn't applied yet, so it can never talk you past the 5% ceiling while you're offline.</div>
+      </div>
+
+      <div class="h2">Open positions</div>
+      <div class="card" id="positions"></div>
+    </div>
+
+    <div class="small muted" style="margin:14px 2px">
+      Entries reach the laptop within ~20s while it's running (marked 📱). Numbers refresh when the laptop syncs.
+      <a href="#" onclick="signOut();return false" style="color:var(--muted)">Disconnect</a>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+
+const LS = { cfg:'fin-cfg', queue:'fin-queue', snap:'fin-snap' }
+let sb = null, snapshot = null, tab = 'money'
+
+// ── money log config ──
+const MODES = [
+  { id:'out',      label:'Spent',    emoji:'💸', color:'var(--rose)',   types:['Rent','Groceries','Food/Drinks','Transport','Phone','Subscriptions','Personal Care','Entertainment','Other'] },
+  { id:'in',       label:'Received', emoji:'💰', color:'var(--green)',  types:['Salary','Tip','Bonus','Gift','Refund','Interest','Other'] },
+  { id:'invest',   label:'Invest',   emoji:'📈', color:'var(--blue)',   types:['DCA Buy','Tactical Buy','Sell (DCA)','Sell (Tactical)','Sell (Legacy)','Joint Contribution'] },
+  { id:'transfer', label:'Transfer', emoji:'↔️', color:'var(--violet)', types:['Transfer'] }
+]
+const EMOJI = {'Rent':'🏠','Groceries':'🛒','Food/Drinks':'🍜','Transport':'🚌','Phone':'📱','Subscriptions':'🔁','Personal Care':'🧴','Entertainment':'🎬','Other':'📦','Salary':'💼','Tip':'💶','Bonus':'✨','Gift':'🎀','Refund':'↩️','Interest':'🏦','DCA Buy':'🌱','Tactical Buy':'🎯','Sell (DCA)':'🌾','Sell (Tactical)':'🎯','Sell (Legacy)':'🍂','Joint Contribution':'🤝','Transfer':'↔️'}
+let mode = MODES[0], type = null
+let riskPct = 0.01
+
+const $ = (id) => document.getElementById(id)
+const euro = (v,d=2) => (v<0?'−':'') + '€' + Math.abs(v).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+const r2 = (v) => Math.round((v + (v>=0?1e-9:-1e-9)) * 100) / 100
+const r4 = (v) => Math.round((v + (v>=0?1e-9:-1e-9)) * 10000) / 10000
+
+function cfg(){ try { return JSON.parse(localStorage.getItem(LS.cfg)) } catch { return null } }
+function queue(){ try { return JSON.parse(localStorage.getItem(LS.queue)) || [] } catch { return [] } }
+function setQueue(q){ localStorage.setItem(LS.queue, JSON.stringify(q)); renderPending(); if (tab==='trading') renderTrading() }
+
+window.showTab = (t) => {
+  tab = t
+  $('tab-money').classList.toggle('hidden', t!=='money')
+  $('tab-trading').classList.toggle('hidden', t!=='trading')
+  $('tab-btn-money').classList.toggle('on', t==='money')
+  $('tab-btn-trading').classList.toggle('on', t==='trading')
+  if (t==='trading') renderTrading()
+}
+
+window.connect = async () => {
+  const c = { url:$('s-url').value.trim().replace(/\/+$/,''), key:$('s-key').value.trim(), email:$('s-email').value.trim() }
+  $('s-error').textContent = ''
+  try {
+    sb = createClient(c.url, c.key)
+    const { error } = await sb.auth.signInWithPassword({ email:c.email, password:$('s-pass').value })
+    if (error) throw error
+    localStorage.setItem(LS.cfg, JSON.stringify(c))
+    boot()
+  } catch(e){ $('s-error').textContent = e.message || String(e) }
+}
+window.signOut = async () => { if (sb) await sb.auth.signOut(); localStorage.removeItem(LS.cfg); location.reload() }
+
+async function boot(){
+  const c = cfg()
+  if (!c){ $('setup').classList.remove('hidden'); return }
+  if (!sb) sb = createClient(c.url, c.key)
+  const { data } = await sb.auth.getSession()
+  if (!data.session){ $('setup').classList.remove('hidden'); return }
+  $('setup').classList.add('hidden'); $('app').classList.remove('hidden')
+  $('date').value = new Date().toISOString().slice(0,10)
+  setRisk('green'); renderModes()
+  const cached = localStorage.getItem(LS.snap)
+  if (cached){ try { snapshot = JSON.parse(cached); render() } catch {} }
+  renderPending()
+  await flushQueue(); await refresh()
+  setInterval(refresh, 30000)
+  ;['c-entry','c-stop','c-instrument'].forEach(id => $(id).addEventListener('input', renderCalc))
+  window.addEventListener('online', flushQueue)
+}
+
+async function refresh(){
+  if (!navigator.onLine || !sb) return
+  try {
+    const { data, error } = await sb.from('sync_snapshot').select('updated_at, data').maybeSingle()
+    if (error || !data) return
+    snapshot = { ...data.data, _updatedAt: data.updated_at }
+    localStorage.setItem(LS.snap, JSON.stringify(snapshot))
+    render()
+  } catch {}
+}
+
+// ── money logging ──
+function renderModes(){
+  $('modes').innerHTML = ''
+  for (const m of MODES){
+    const b = document.createElement('button'); b.className='mode'; b.innerHTML=`<span>${m.emoji}</span>${m.label}`
+    if (m===mode){ b.style.background=m.color; b.style.color='#fff' }
+    b.onclick = () => { mode=m; type = m.id==='transfer'?'Transfer':null; renderModes() }
+    $('modes').appendChild(b)
+  }
+  $('types').innerHTML=''
+  if (mode.id!=='transfer'){
+    for (const t of mode.types){
+      const b=document.createElement('button'); b.className='chip'; b.textContent=`${EMOJI[t]||''} ${t}`
+      if (t===type){ b.style.background=mode.color; b.style.borderColor=mode.color; b.style.color='#fff' }
+      b.onclick = () => { type=t; renderModes() }; $('types').appendChild(b)
+    }
+  }
+  $('toAccount').classList.toggle('hidden', mode.id!=='transfer'); validate()
+}
+function validate(){
+  const amt = Number(($('amount').value||'').replace(',','.'))
+  const ok = type && amt>0 && $('account').value!=='' && (mode.id!=='transfer' || ($('toAccount').value!=='' && $('toAccount').value!==$('account').value))
+  $('logBtn').disabled = !ok
+}
+;['amount','account','toAccount','date'].forEach(id => document.addEventListener('input', e => { if (e.target.id===id) validate() }))
+
+window.logIt = async () => {
+  const amt = r2(Number($('amount').value.replace(',','.')))
+  const payload = { date:$('date').value, type, amount:amt, accountId:Number($('account').value),
+    categoryOrAsset:null, note:$('note').value.trim()||null, toAccountId: mode.id==='transfer'?Number($('toAccount').value):null }
+  $('amount').value=''; $('note').value=''; type = mode.id==='transfer'?'Transfer':null; renderModes()
+  enqueue({ kind:'txAdd', payload })
+  $('log-msg').textContent = navigator.onLine ? 'Sent — the laptop applies it within ~20s. ✓' : 'Saved on the phone — sends when online. ✓'
+  setTimeout(()=>{ $('log-msg').textContent='' }, 3500)
+}
+
+// ── trading ──
+window.setRisk = (k) => {
+  const t = snapshot?.trading || {}
+  riskPct = k==='green' ? (t.riskGreen ?? 0.01) : (t.riskYellow ?? 0.005)
+  $('risk-green').style.cssText = k==='green' ? 'background:var(--green);border-color:var(--green);color:#fff' : ''
+  $('risk-yellow').style.cssText = k==='yellow' ? 'background:var(--amber);border-color:var(--amber);color:#fff' : ''
+  renderCalc()
+}
+// queued trades not yet on the laptop → count their cash + risk locally, so discipline holds offline
+function queuedTrades(){ return queue().filter(e => e.kind==='tradeAdd').map(e => e.payload) }
+function effectiveTrading(){
+  const t = snapshot?.trading || {}
+  const q = queuedTrades()
+  const qCash = q.reduce((s,x)=> s + x.size*x.entry, 0)
+  const qRisk = q.reduce((s,x)=> s + x.size*Math.abs(x.entry-x.stop), 0)
+  return {
+    account: t.tradingCapital ?? 0,               // capital unchanged by buying
+    fund: r2((t.brokerCash ?? 0) - qCash),         // free cash drops
+    openRisk: r2((t.openRisk ?? 0) + qRisk),        // risk rises
+    ceilingPct: t.ceilingPct ?? 0.05,
+    queuedCount: q.length
+  }
+}
+function renderCalc(){
+  const e = effectiveTrading()
+  const entry = Number(($('c-entry').value||'').replace(',','.'))
+  const stop = Number(($('c-stop').value||'').replace(',','.'))
+  const rpu = Math.abs(entry-stop)
+  const budget = r2(e.account*riskPct)
+  const ceiling = r2(e.account*e.ceilingPct)
+  const room = r2(ceiling - e.openRisk)
+  const raw = rpu===0?0:r4(budget/rpu)
+  const maxCash = entry>0?r4(e.fund/entry):0
+  const maxRoom = rpu===0?0:r4(Math.max(room,0)/rpu)
+  const finalSize = rpu===0?0:(room < budget/2 ? 0 : Math.min(raw,maxCash,maxRoom))
+  let decision='Enter entry & stop', color='var(--muted)'
+  if (rpu>0){
+    if (room<=0){ decision='STOP — 5% ceiling'; color='var(--rose)' }
+    else if (room>=budget){ decision='TAKE IT — room is fine'; color='var(--green)' }
+    else { decision='CAUTION — A+ only'; color='var(--amber)' }
+  }
+  $('c-size').textContent = finalSize
+  $('c-decision').textContent = decision; $('c-decision').style.background = color
+  $('c-cash').textContent = euro(r2(finalSize*entry))
+  $('c-risk').textContent = euro(r2(finalSize*rpu))
+  $('c-room').textContent = euro(room)
+  $('c-log').disabled = !(finalSize>0 && $('c-instrument').value.trim())
+  $('c-log').dataset.size = finalSize; $('c-log').dataset.entry = entry; $('c-log').dataset.stop = stop
+}
+window.logTrade = () => {
+  const b = $('c-log')
+  const payload = { date:new Date().toISOString().slice(0,10), instrument:$('c-instrument').value.trim(),
+    light: riskPct>=0.01?'Green':'Yellow', setup:null,
+    entry:Number(b.dataset.entry), stop:Number(b.dataset.stop), size:Number(b.dataset.size), note:null }
+  enqueue({ kind:'tradeAdd', payload })
+  $('c-entry').value=''; $('c-stop').value=''; $('c-instrument').value=''
+  renderCalc()
+  $('c-msg').textContent = navigator.onLine ? 'Trade sent — the laptop opens it within ~20s. ✓' : 'Saved on the phone — sends when online. ✓'
+  setTimeout(()=>{ $('c-msg').textContent='' }, 3500)
+}
+window.trailPos = (key) => {
+  const v = prompt('New (higher) stop:'); if (v===null) return
+  const s = Number(v.replace(',','.')); if (!(s>0)) return
+  enqueue({ kind:'tradeTrail', payload:{ tradeKey:key, newStop:s } })
+}
+window.pricePos = (key) => {
+  const v = prompt('Current market price:'); if (v===null) return
+  const p = Number(v.replace(',','.')); if (!(p>0)) return
+  enqueue({ kind:'tradeSetPrice', payload:{ tradeKey:key, price:p } })
+}
+window.closePos = (key, size) => {
+  const v = prompt('Exit price (closes the position):'); if (v===null) return
+  const x = Number(v.replace(',','.')); if (!(x>0)) return
+  enqueue({ kind:'tradeClose', payload:{ tradeKey:key, exit:x } })
+}
+
+function renderTrading(){
+  const t = snapshot?.trading || {}
+  const e = effectiveTrading()
+  const age = snapshot?._updatedAt ? Math.round((Date.now()-new Date(snapshot._updatedAt).getTime())/60000) : null
+  $('trade-fresh').textContent = age===null?'':age<2?'· fresh':age<60?`· ${age}m ago`:`· ${Math.round(age/60)}h ago`
+  $('trading').innerHTML = `
+    <div class="stat"><div class="l">Capital</div><div class="v">${euro(e.account)}</div></div>
+    <div class="stat"><div class="l">Free cash</div><div class="v">${euro(e.fund)}</div></div>
+    <div class="stat"><div class="l">Open risk</div><div class="v" style="color:${e.openRisk>0?'var(--rose)':'var(--ink)'}">${euro(e.openRisk)}</div></div>`
+  $('risk-note').textContent = e.queuedCount>0
+    ? `Includes ${e.queuedCount} trade(s) you queued here, not yet on the laptop.`
+    : `Light on the laptop: ${t.currentLight||'—'} · ceiling ${euro(r2(e.account*e.ceilingPct))}`
+  const open = snapshot?.openTrades || []
+  const queuedOpen = queuedTrades().map(q => `<div class="row"><span><b>${q.instrument}</b> <span class="small muted">${q.size} @ ${q.entry} · ⏳ sending</span></span></div>`).join('')
+  $('positions').innerHTML = queuedOpen + (open.map(o => {
+    const eff = o.currentStop ?? o.stop, riskFree = eff>=o.entry
+    const worth = o.currentPrice ? ` · worth ${euro(o.size*o.currentPrice)}` : ''
+    return `<div class="row" style="flex-wrap:wrap"><span style="flex:1;min-width:150px"><b>${o.instrument}</b>
+      <span class="small muted">${o.size} @ ${o.entry} · stop ${eff}${worth}</span>
+      <div class="small" style="color:${riskFree?'var(--green)':'var(--amber)'}">${riskFree?'🛡️ risk-free':'🔥 at risk'}</div></span>
+      <span class="flexr" style="gap:5px">
+        <button class="btn-line" style="padding:6px 9px;font-size:12px" onclick="pricePos('${o.key}')">€ price</button>
+        <button class="btn-line" style="padding:6px 9px;font-size:12px" onclick="trailPos('${o.key}')">⬆ trail</button>
+        <button class="btn-line" style="padding:6px 9px;font-size:12px" onclick="closePos('${o.key}',${o.size})">close</button>
+      </span></div>`
+  }).join('') || (queuedOpen ? '' : '<div class="small muted" style="padding:6px 2px">flat — all cash, all calm</div>'))
+}
+
+// ── queue plumbing ──
+function enqueue(ev){ const q=queue(); q.push(ev); setQueue(q); flushQueue() }
+async function flushQueue(){
+  const q = queue(); if (!q.length || !navigator.onLine || !sb) return
+  const { data } = await sb.auth.getSession(); if (!data.session) return
+  const remaining = []
+  for (const ev of q){
+    const { error } = await sb.from('sync_events').insert({ kind:ev.kind, payload:ev.payload, user_id:data.session.user.id })
+    if (error) remaining.push(ev)
+  }
+  setQueue(remaining)
+}
+function renderPending(){
+  const n = queue().length
+  $('pending-banner').classList.toggle('hidden', n===0)
+  if (n) $('pending-banner').innerHTML = `<b>${n} item${n===1?'':'s'} waiting to send</b> — they go automatically when you're back online.`
+}
+
+function render(){
+  if (!snapshot) return
+  const s = snapshot
+  const age = s._updatedAt ? Math.round((Date.now()-new Date(s._updatedAt).getTime())/60000) : null
+  $('freshness').textContent = age===null?'':age<2?'· fresh':age<60?`· ${age}m ago`:`· ${Math.round(age/60)}h ago — updates when the laptop runs`
+  $('networth').textContent = euro(s.netWorth); $('corefi').textContent = euro(s.coreFi)
+  $('goals').innerHTML=''
+  for (const g of (s.goals||[]).slice(0,3)){
+    const d=document.createElement('div'); d.style.marginTop='8px'
+    const color = g.name.toLowerCase().includes('emergency')?'var(--green)':'var(--blue)'
+    d.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:13px"><b>${g.emoji} ${g.name}</b><span class="muted">${euro(g.current)} / ${euro(g.target,0)}</span></div>
+      <div class="bar"><div class="fill" style="width:${Math.min(100,g.pct*100)}%;background:${color}"></div></div>`
+    $('goals').appendChild(d)
+  }
+  const m = s.month||{}
+  $('month').innerHTML = ['Income','Expenses','Invested'].map((l,i)=>{
+    const v=[m.income,m.expenses,m.invested][i]||0, c=['var(--green)','var(--rose)','var(--blue)'][i]
+    return `<div class="stat"><div class="l">${l}</div><div class="v" style="color:${c}">${euro(v)}</div></div>` }).join('')
+  $('accounts').innerHTML = (s.cashAccounts||[]).map(a =>
+    `<div class="row"><span>${a.name}${a.excluded?' <span class="small muted">excluded</span>':''}</span><b>${euro(a.balance)}</b></div>`).join('')
+  const accSel=$('account'), toSel=$('toAccount')
+  const opts=(s.cashAccounts||[]).map(a=>`<option value="${a.id}">${a.name}</option>`).join('')
+  const keep=accSel.value; accSel.innerHTML=opts; toSel.innerHTML=opts; if (keep) accSel.value=keep
+  if (tab==='trading') renderTrading()
+  validate()
+}
+
+boot()
+</script>
+</body>
+</html>
