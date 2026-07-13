@@ -112,6 +112,9 @@
       <div class="h2">This month</div>
       <div class="card"><div class="grid3" id="month"></div></div>
 
+      <div class="h2">Entries this month</div>
+      <div class="card" id="entries"></div>
+
       <div class="h2">Cash accounts</div>
       <div class="card" id="accounts"></div>
     </div>
@@ -413,6 +416,18 @@ function render(){
   $('month').innerHTML = ['Income','Expenses','Invested'].map((l,i)=>{
     const v=[m.income,m.expenses,m.invested][i]||0, c=['var(--green)','var(--rose)','var(--blue)'][i]
     return `<div class="stat"><div class="l">${l}</div><div class="v" style="color:${c}">${euro(v)}</div></div>` }).join('')
+  const entries = s.monthEntries||[]
+  $('entries').innerHTML = entries.length===0
+    ? '<div class="small muted" style="padding:6px 2px">Nothing logged this month yet.</div>'
+    : entries.map(t => {
+        const sign = t.direction==='OUT' ? '−' : t.direction==='IN' ? '+' : ''
+        const color = t.direction==='OUT' ? 'var(--rose)' : t.direction==='IN' ? 'var(--green)' : 'var(--violet)'
+        const label = t.direction==='TRANSFER' ? `${t.account} → ${t.toAccount||'?'}` : (t.category ? `${t.type} · ${t.category}` : t.type)
+        const emoji = EMOJI[t.category] || EMOJI[t.type] || ''
+        const note = t.note ? ` <span class="small muted">${t.note}</span>` : ''
+        return `<div class="row"><span style="flex:1"><b>${emoji} ${label}</b>${note}<div class="small muted">${t.date} · ${t.account}</div></span>
+          <b style="color:${color};white-space:nowrap">${sign}${euro(t.amount)}</b></div>`
+      }).join('')
   $('accounts').innerHTML = (s.cashAccounts||[]).map(a =>
     `<div class="row"><span>${a.name}${a.excluded?' <span class="small muted">excluded</span>':''}</span><b>${euro(a.balance)}</b></div>`).join('')
   const accSel=$('account'), toSel=$('toAccount')
