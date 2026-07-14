@@ -145,7 +145,10 @@
           <div class="stat"><div class="l">Risk €</div><div class="v" id="c-risk">—</div></div>
           <div class="stat"><div class="l">Room left</div><div class="v" id="c-room">—</div></div>
         </div>
-        <input id="c-instrument" placeholder="Instrument (e.g. AAPL)" style="margin-top:10px" />
+        <div class="flexr" style="margin-top:10px">
+          <input id="c-instrument" placeholder="Instrument (e.g. AAPL)" style="flex:1" />
+          <select id="c-setup" style="width:130px"></select>
+        </div>
         <button class="btn-primary" id="c-log" style="margin-top:8px" onclick="logTrade()" disabled>Write this trade</button>
         <div id="c-msg" class="small green" style="margin-top:7px"></div>
         <div class="small muted" style="margin-top:8px">The calculator counts trades you've queued here that the laptop hasn't applied yet, so it can never talk you past the 5% ceiling while you're offline.</div>
@@ -153,6 +156,12 @@
 
       <div class="h2">Open positions</div>
       <div class="card" id="positions"></div>
+
+      <div class="h2">Recent trades</div>
+      <div class="card" id="recent-trades"></div>
+
+      <div class="h2">This week's watchlist <span id="watch-week" class="muted" style="text-transform:none;letter-spacing:0"></span></div>
+      <div class="card" id="watchlist"></div>
     </div>
 
     <div class="small muted" style="margin:14px 2px">
@@ -179,6 +188,9 @@ const MODES = [
 const EMOJI = {'Rent':'🏠','Groceries':'🛒','Food/Drinks':'🍜','Transport':'🚌','Phone':'📱','Subscriptions':'🔁','Personal Care':'🧴','Entertainment':'🎬','Other':'📦','Salary':'💼','Tip':'💶','Bonus':'✨','Gift':'🎀','Refund':'↩️','Interest':'🏦','DCA Buy':'🌱','Tactical Buy':'🎯','Sell (DCA)':'🌾','Sell (Tactical)':'🎯','Sell (Legacy)':'🍂','Joint Contribution':'🤝','Transfer':'↔️'}
 let mode = MODES[0], type = null
 let riskPct = 0.01
+
+// setups mirror the desktop's ALL_SETUPS (Volman trend/range + VCP + Point&Figure)
+const SETUPS = [['','— setup —'],['DD','Double Doji'],['FB','First Break'],['SB','Second Break'],['BB','Block Break'],['RB','Range Break'],['IRB','Inside Range Break'],['ARB','Advanced Range Break'],['VCP','Volatility Contraction'],['DTB','Double Top Buy'],['TTB','Triple Top Buy'],['CAT','Bullish Catapult'],['TL45','45° Trendline Break']]
 
 const $ = (id) => document.getElementById(id)
 const euro = (v,d=2) => (v<0?'−':'') + '€' + Math.abs(v).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
@@ -219,6 +231,7 @@ async function boot(){
   if (!data.session){ $('setup').classList.remove('hidden'); return }
   $('setup').classList.add('hidden'); $('app').classList.remove('hidden')
   $('date').value = new Date().toISOString().slice(0,10)
+  $('c-setup').innerHTML = SETUPS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')
   setRisk('green'); renderModes()
   const cached = localStorage.getItem(LS.snap)
   if (cached){ try { snapshot = JSON.parse(cached); render() } catch {} }
@@ -328,10 +341,10 @@ function renderCalc(){
 window.logTrade = () => {
   const b = $('c-log')
   const payload = { date:new Date().toISOString().slice(0,10), instrument:$('c-instrument').value.trim(),
-    light: riskPct>=0.01?'Green':'Yellow', setup:null,
+    light: riskPct>=0.01?'Green':'Yellow', setup:$('c-setup').value||null,
     entry:Number(b.dataset.entry), stop:Number(b.dataset.stop), size:Number(b.dataset.size), note:null }
   enqueue({ kind:'tradeAdd', payload })
-  $('c-entry').value=''; $('c-stop').value=''; $('c-instrument').value=''
+  $('c-entry').value=''; $('c-stop').value=''; $('c-instrument').value=''; $('c-setup').value=''
   renderCalc()
   $('c-msg').textContent = navigator.onLine ? 'Trade sent — the laptop opens it within ~20s. ✓' : 'Saved on the phone — sends when online. ✓'
   setTimeout(()=>{ $('c-msg').textContent='' }, 3500)
@@ -350,6 +363,19 @@ window.closePos = (key, size) => {
   const v = prompt('Exit price (closes the position):'); if (v===null) return
   const x = Number(v.replace(',','.')); if (!(x>0)) return
   enqueue({ kind:'tradeClose', payload:{ tradeKey:key, exit:x } })
+}
+window.editPos = (key) => {
+  const o = (snapshot?.openTrades||[]).find(x => x.key===key); if (!o) return
+  const entry = prompt('Entry price:', o.entry); if (entry===null) return
+  const stop = prompt('Stop price (initial — R basis):', o.stop); if (stop===null) return
+  const size = prompt('Size (shares/units):', o.size); if (size===null) return
+  const payload = { tradeKey:key }
+  const e=Number(String(entry).replace(',','.')), s=Number(String(stop).replace(',','.')), sz=Number(String(size).replace(',','.'))
+  if (e>0) payload.entry=e
+  if (s>0) payload.stop=s
+  if (sz>0) payload.size=sz
+  if (e===s){ alert('Entry and stop cannot be equal.'); return }
+  enqueue({ kind:'tradeUpdate', payload })
 }
 
 function renderTrading(){
@@ -372,12 +398,48 @@ function renderTrading(){
     return `<div class="row" style="flex-wrap:wrap"><span style="flex:1;min-width:150px"><b>${o.instrument}</b>
       <span class="small muted">${o.size} @ ${o.entry} · stop ${eff}${worth}</span>
       <div class="small" style="color:${riskFree?'var(--green)':'var(--amber)'}">${riskFree?'🛡️ risk-free':'🔥 at risk'}</div></span>
-      <span class="flexr" style="gap:5px">
+      <span class="flexr" style="gap:5px;flex-wrap:wrap">
         <button class="btn-line" style="padding:6px 9px;font-size:12px" onclick="pricePos('${o.key}')">€ price</button>
         <button class="btn-line" style="padding:6px 9px;font-size:12px" onclick="trailPos('${o.key}')">⬆ trail</button>
+        <button class="btn-line" style="padding:6px 9px;font-size:12px" onclick="editPos('${o.key}')">✎ edit</button>
         <button class="btn-line" style="padding:6px 9px;font-size:12px" onclick="closePos('${o.key}',${o.size})">close</button>
       </span></div>`
   }).join('') || (queuedOpen ? '' : '<div class="small muted" style="padding:6px 2px">flat — all cash, all calm</div>'))
+  renderRecentTrades()
+  renderWatchlist()
+}
+
+function renderRecentTrades(){
+  const rows = snapshot?.recentTrades || []
+  if (rows.length===0){ $('recent-trades').innerHTML = '<div class="small muted" style="padding:6px 2px">No closed trades yet — written trades show here once the laptop applies them.</div>'; return }
+  $('recent-trades').innerHTML = rows.map(t => {
+    const net = (t.net ?? 0), color = net>=0?'var(--green)':'var(--rose)'
+    const rTxt = (t.r!==null&&t.r!==undefined) ? `${t.r>=0?'+':''}${t.r.toFixed(2)}R` : '—'
+    const setup = t.setup ? ` · ${t.setup}` : ''
+    return `<div class="row" style="flex-wrap:wrap"><span style="flex:1;min-width:140px"><b>${t.instrument}</b>
+      <span class="small muted">${t.date}${setup} · ${t.entry}→${t.exit}</span></span>
+      <span style="text-align:right;white-space:nowrap"><b style="color:${color}">${net>=0?'+':''}${euro(net)}</b> <span class="small muted">${rTxt}</span></span></div>`
+  }).join('')
+}
+
+function renderWatchlist(){
+  const sc = snapshot?.scan || {}
+  const wl = snapshot?.watchlist || []
+  const lightDot = (l) => l==='Green'?'🟢':l==='Yellow'?'🟡':l==='Red'?'🔴':''
+  $('watch-week').textContent = sc.scanDate ? `· scanned ${sc.scanDate}` : ''
+  const lights = (sc.bigCapLight||sc.smallMidLight)
+    ? `<div class="small" style="margin-bottom:8px">Big-cap ${lightDot(sc.bigCapLight)||'—'} · Breadth ${lightDot(sc.smallMidLight)||'—'}${sc.sectors?` · <span class="muted">${sc.sectors}</span>`:''}</div>`
+    : ''
+  if (wl.length===0){
+    $('watchlist').innerHTML = lights + '<div class="small muted" style="padding:6px 2px">No names yet — an empty watchlist is a valid watchlist.</div>'
+    return
+  }
+  $('watchlist').innerHTML = lights + wl.map(w => {
+    const tags = [w.capType, w.sector, w.timeframe].filter(Boolean).join(' · ')
+    const note = w.note ? `<div class="small muted">${w.note}</div>` : ''
+    return `<div class="row" style="flex-wrap:wrap"><span style="flex:1;min-width:150px">
+      <b>${lightDot(w.light)} ${w.instrument}</b>${tags?` <span class="small muted">${tags}</span>`:''}${note}</span></div>`
+  }).join('')
 }
 
 // ── queue plumbing ──
