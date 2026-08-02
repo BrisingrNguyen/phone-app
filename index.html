@@ -97,6 +97,9 @@
           <input id="fee" inputmode="decimal" placeholder="− fee (optional)" style="flex:1" />
           <span class="small green" id="fee-net" style="white-space:nowrap"></span>
         </div>
+        <div class="flexr hidden" id="gain-row" style="margin-top:8px">
+          <input id="gain" inputmode="decimal" placeholder="± gain of this sale (optional — for tax)" style="flex:1" />
+        </div>
         <div class="flexr" style="margin-top:8px">
           <select id="account" style="flex:1"></select>
           <select id="toAccount" class="hidden" style="flex:1"></select>
@@ -185,12 +188,13 @@ let sb = null, snapshot = null, tab = 'money'
 // ── money log config ──
 const MODES = [
   { id:'out',      label:'Spent',    emoji:'💸', color:'var(--rose)',   types:['Rent','Groceries','Food/Drinks','Transport','Phone','Subscriptions','Personal Care','Household','Entertainment','Other'] },
-  { id:'in',       label:'Received', emoji:'💰', color:'var(--green)',  types:['Salary','Freelance','Upwork','Side','Tip','Bonus','Gift','Refund','Interest','Other'] },
+  { id:'in',       label:'Received', emoji:'💰', color:'var(--green)',  types:['Tip','Salary','Side','Freelance','Upwork','Bonus','Gift','Refund','Interest','Other'] },
   { id:'invest',   label:'Invest',   emoji:'📈', color:'var(--blue)',   types:['DCA Buy','Tactical Buy','Sell (DCA)','Sell (Tactical)','Sell (Legacy)','Joint Contribution'] },
   { id:'transfer', label:'Transfer', emoji:'↔️', color:'var(--violet)', types:['Transfer'] }
 ]
 const EMOJI = {'Rent':'🏠','Groceries':'🛒','Food/Drinks':'🍜','Transport':'🚌','Phone':'📱','Subscriptions':'🔁','Personal Care':'🧴','Household':'🧺','Entertainment':'🎬','Other':'📦','Salary':'💼','Freelance':'🧑‍💻','Upwork':'🌐','Side':'✨','Tip':'💶','Bonus':'✨','Gift':'🎀','Refund':'↩️','Interest':'🏦','DCA Buy':'🌱','Tactical Buy':'🎯','Sell (DCA)':'🌾','Sell (Tactical)':'🎯','Sell (Legacy)':'🍂','Joint Contribution':'🤝','Transfer':'↔️'}
-const FEE_TYPES = new Set(['Salary','Freelance','Upwork','Side']) // earning sources — gross − optional fee = take-home
+const FEE_TYPES = new Set(['Tip','Salary','Side','Freelance','Upwork']) // earning sources — gross − optional fee = take-home
+const SELL_SET = new Set(['Sell (DCA)','Sell (Tactical)','Sell (Legacy)']) // sells can carry their profit part, for tax time
 let mode = MODES[0], type = null
 let riskPct = 0.01
 
@@ -278,6 +282,8 @@ function renderModes(){
   $('toAccount').classList.toggle('hidden', mode.id!=='transfer')
   $('fee-row').classList.toggle('hidden', !FEE_TYPES.has(type))
   if (!FEE_TYPES.has(type)) $('fee').value=''
+  $('gain-row').classList.toggle('hidden', !SELL_SET.has(type))
+  if (!SELL_SET.has(type)) $('gain').value=''
   validate()
 }
 // earning sources: the log records the take-home (gross − fee) — what actually lands in the account
@@ -286,14 +292,22 @@ function feeNet(){
   const fee = ($('fee').value||'').trim()==='' ? 0 : Number($('fee').value.replace(',','.'))
   return { gross, fee, net: r2(gross - fee) }
 }
+function gainVal(){
+  const raw = ($('gain').value||'').trim()
+  if (raw==='' || !SELL_SET.has(type)) return null
+  const g = Number(raw.replace(',','.'))
+  return Number.isFinite(g) ? r2(g) : NaN // NaN = typed but not a number → block
+}
 function validate(){
   const { gross, fee, net } = feeNet()
   const amtOk = FEE_TYPES.has(type) ? (gross>0 && fee>=0 && net>0) : gross>0
-  const ok = type && amtOk && $('account').value!=='' && (mode.id!=='transfer' || ($('toAccount').value!=='' && $('toAccount').value!==$('account').value))
+  const g = gainVal()
+  const gainOk = g===null || Number.isFinite(g)
+  const ok = type && amtOk && gainOk && $('account').value!=='' && (mode.id!=='transfer' || ($('toAccount').value!=='' && $('toAccount').value!==$('account').value))
   $('logBtn').disabled = !ok
   $('fee-net').textContent = (FEE_TYPES.has(type) && fee>0 && net>0) ? `= ${euro(net)} take-home` : ''
 }
-;['amount','fee','account','toAccount','date'].forEach(id => document.addEventListener('input', e => { if (e.target.id===id) validate() }))
+;['amount','fee','gain','account','toAccount','date'].forEach(id => document.addEventListener('input', e => { if (e.target.id===id) validate() }))
 
 window.logIt = async () => {
   const { gross, fee, net } = feeNet()
@@ -301,9 +315,11 @@ window.logIt = async () => {
   const amt = isEarn ? net : r2(gross)
   const feeNote = (isEarn && fee>0) ? `gross ${euro(gross)} − fee ${euro(r2(fee))}` : null
   const userNote = $('note').value.trim()||null
+  const g = gainVal()
   const payload = { date:$('date').value, type, amount:amt, accountId:Number($('account').value),
-    categoryOrAsset:null, note:[feeNote,userNote].filter(Boolean).join(' · ')||null, toAccountId: mode.id==='transfer'?Number($('toAccount').value):null }
-  $('amount').value=''; $('fee').value=''; $('note').value=''; type = mode.id==='transfer'?'Transfer':null; renderModes()
+    categoryOrAsset:null, note:[feeNote,userNote].filter(Boolean).join(' · ')||null, toAccountId: mode.id==='transfer'?Number($('toAccount').value):null,
+    gain: (g!==null && Number.isFinite(g)) ? g : null }
+  $('amount').value=''; $('fee').value=''; $('gain').value=''; $('note').value=''; type = mode.id==='transfer'?'Transfer':null; renderModes()
   enqueue({ kind:'txAdd', payload })
   $('log-msg').textContent = navigator.onLine ? 'Sent — the laptop applies it within ~20s. ✓' : 'Saved on the phone — sends when online. ✓'
   setTimeout(()=>{ $('log-msg').textContent='' }, 3500)
@@ -507,7 +523,8 @@ function render(){
         const label = t.direction==='TRANSFER' ? `${t.account} → ${t.toAccount||'?'}` : (t.category ? `${t.type} · ${t.category}` : t.type)
         const emoji = EMOJI[t.category] || EMOJI[t.type] || ''
         const note = t.note ? ` <span class="small muted">${t.note}</span>` : ''
-        return `<div class="row"><span style="flex:1"><b>${emoji} ${label}</b>${note}<div class="small muted">${t.date} · ${t.account}</div></span>
+        const gain = (t.gain!==null && t.gain!==undefined) ? ` <span class="small" style="color:${t.gain>=0?'var(--green)':'var(--rose)'};font-weight:700">gain ${t.gain>=0?'+':'−'}${euro(Math.abs(t.gain))}</span>` : ''
+        return `<div class="row"><span style="flex:1"><b>${emoji} ${label}</b>${gain}${note}<div class="small muted">${t.date} · ${t.account}</div></span>
           <b style="color:${color};white-space:nowrap">${sign}${euro(t.amount)}</b></div>`
       }).join('')
   $('accounts').innerHTML = (s.cashAccounts||[]).map(a =>
