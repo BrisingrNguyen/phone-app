@@ -116,7 +116,13 @@
         <div id="goals" style="margin-top:10px"></div>
       </div>
 
-      <div class="h2">This month</div>
+      <div class="h2">This month <span id="growth-since" class="muted" style="text-transform:none;letter-spacing:0"></span></div>
+      <div class="card" id="growth-card">
+        <div class="big" id="growth-now">—</div>
+        <div class="small" id="growth-change" style="text-align:center"></div>
+        <div class="small muted" id="growth-split" style="text-align:center;margin-top:4px"></div>
+        <div id="growth-accounts" style="margin-top:10px"></div>
+      </div>
       <div class="card"><div class="grid3" id="month"></div></div>
 
       <div class="h2">Entries this month</div>
@@ -514,6 +520,27 @@ function render(){
   $('month').innerHTML = ['Income','Expenses','Invested'].map((l,i)=>{
     const v=[m.income,m.expenses,m.invested][i]||0, c=['var(--green)','var(--rose)','var(--blue)'][i]
     return `<div class="stat"><div class="l">${l}</div><div class="v" style="color:${c}">${euro(v)}</div></div>` }).join('')
+  // the same month view as the laptop's Home: money now vs the last count of last month
+  const g = s.growth
+  if (!g || g.close===null || g.close===undefined){
+    $('growth-card').classList.add('hidden')
+  } else {
+    $('growth-card').classList.remove('hidden')
+    const sgn = (v) => v===null||v===undefined ? '—' : (v===0 ? euro(0) : (v>0?'+':'−')+euro(Math.abs(v)))
+    const col = (v) => v===null||v===undefined ? 'var(--muted)' : v>0 ? 'var(--green)' : v<0 ? 'var(--rose)' : 'var(--muted)'
+    const d = g.openDate ? `${g.openDate.slice(8)}.${g.openDate.slice(5,7)}` : ''
+    $('growth-since').textContent = g.openDate ? (g.partial ? `· since you started ${d}` : `· since last month ${d}`) : ''
+    $('growth-now').textContent = euro(g.close)
+    $('growth-change').innerHTML = g.change===null||g.change===undefined ? ''
+      : `<b style="color:${col(g.change)};font-size:15px">${sgn(g.change)}</b>${g.pct!==null&&g.pct!==undefined?` <span class="muted">(${g.pct>0?'+':''}${g.pct.toFixed(1)}%)</span>`:''}`
+    $('growth-split').innerHTML = (g.byItself===null||g.byItself===undefined) ? ''
+      : `you put in <b class="ink">${sgn(g.moved)}</b> · grew by itself <b style="color:${col(g.byItself)}">${sgn(g.byItself)}</b>`
+    $('growth-accounts').innerHTML = (g.accounts||[])
+      .map(a => `<div class="row"><span>${a.name}</span><span class="flexr" style="gap:10px">
+        <span class="muted">${a.balance===null||a.balance===undefined?'—':euro(a.balance)}</span>
+        <b style="color:${col(a.change)};min-width:78px;text-align:right">${sgn(a.change)}</b></span></div>`)
+      .join('')
+  }
   const entries = s.monthEntries||[]
   $('entries').innerHTML = entries.length===0
     ? '<div class="small muted" style="padding:6px 2px">Nothing logged this month yet.</div>'
