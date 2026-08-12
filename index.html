@@ -35,6 +35,9 @@
   .mode span{display:block;font-size:17px;margin-bottom:1px}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
   .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--ink)}
+  .chip.on{border-color:var(--navy);color:var(--navy);background:var(--soft)}
+  .bar{height:7px;border-radius:999px;background:var(--soft);overflow:hidden;margin-top:4px}
+  .bar>i{display:block;height:100%;background:var(--navy);border-radius:999px}
   .green{color:var(--green)}.rose{color:var(--rose)}.amber{color:var(--amber)}
   .banner{border:1px solid var(--line);border-left:4px solid var(--green);border-radius:12px;padding:10px 13px;font-size:13px;margin-top:12px;background:#fff}
   .flexr{display:flex;gap:8px;align-items:center}
@@ -128,6 +131,14 @@
       <div class="h2">Entries this month</div>
       <div class="card" id="entries"></div>
 
+      <div class="h2" id="where-head">Where it went
+        <span style="float:right;text-transform:none;letter-spacing:0">
+          <button class="chip on" id="where-cat" onclick="setWhere('category')">On what</button>
+          <button class="chip" id="where-acc" onclick="setWhere('account')">From which pot</button>
+        </span>
+      </div>
+      <div class="card" id="where"></div>
+
       <div class="h2">Cash accounts</div>
       <div class="card" id="accounts"></div>
     </div>
@@ -193,14 +204,32 @@ let sb = null, snapshot = null, tab = 'money'
 
 // ── money log config ──
 const MODES = [
-  { id:'out',      label:'Spent',    emoji:'💸', color:'var(--rose)',   types:['Rent','Groceries','Food/Drinks','Transport','Phone','Subscriptions','Personal Care','Household','Entertainment','Other'] },
-  { id:'in',       label:'Received', emoji:'💰', color:'var(--green)',  types:['Tip','Salary','Side','Freelance','Upwork','Bonus','Gift','Refund','Interest','Other'] },
+  { id:'out',      label:'Spent',    emoji:'💸', color:'var(--rose)',   types:['Rent','Groceries','Food/Drinks','Transport','Phone','Subscriptions','Personal Care','Household','Clothes','Entertainment','Travel','Other'] },
+  { id:'in',       label:'Received', emoji:'💰', color:'var(--green)',  types:['Tip','Salary','Bonus','Freelance','Gift','Refund','Interest','Other'] },
   { id:'invest',   label:'Invest',   emoji:'📈', color:'var(--blue)',   types:['DCA Buy','Tactical Buy','Sell (DCA)','Sell (Tactical)','Sell (Legacy)','Joint Contribution'] },
   { id:'transfer', label:'Transfer', emoji:'↔️', color:'var(--violet)', types:['Transfer'] }
 ]
-const EMOJI = {'Rent':'🏠','Groceries':'🛒','Food/Drinks':'🍜','Transport':'🚌','Phone':'📱','Subscriptions':'🔁','Personal Care':'🧴','Household':'🧺','Entertainment':'🎬','Other':'📦','Salary':'💼','Freelance':'🧑‍💻','Upwork':'🌐','Side':'✨','Tip':'💶','Bonus':'✨','Gift':'🎀','Refund':'↩️','Interest':'🏦','DCA Buy':'🌱','Tactical Buy':'🎯','Sell (DCA)':'🌾','Sell (Tactical)':'🎯','Sell (Legacy)':'🍂','Joint Contribution':'🤝','Transfer':'↔️'}
-const FEE_TYPES = new Set(['Tip','Salary','Side','Freelance','Upwork']) // earning sources — gross − optional fee = take-home
+const EMOJI = {'Rent':'🏠','Groceries':'🛒','Food/Drinks':'🍜','Transport':'🚌','Phone':'📱','Subscriptions':'🔁','Personal Care':'🧴','Household':'🧺','Clothes':'👕','Entertainment':'🎬','Travel':'✈️','Other':'📦','Salary':'💼','Freelance':'🧑‍💻','Upwork':'🌐','Side':'✨','Tip':'💶','Bonus':'✨','Gift':'🎀','Refund':'↩️','Interest':'🏦','DCA Buy':'🌱','Tactical Buy':'🎯','Sell (DCA)':'🌾','Sell (Tactical)':'🎯','Sell (Legacy)':'🍂','Joint Contribution':'🤝','Transfer':'↔️'}
+const FEE_TYPES = new Set(['Tip','Salary','Bonus','Freelance']) // earning sources — gross − optional fee = take-home
+// Side merged into Bonus and Upwork into Freelance — the retired names still read as income
+// on the laptop, so an entry logged before this update is never mistaken for a spend.
+const RETIRED_IN = new Set(['Side','Upwork'])
 const SELL_SET = new Set(['Sell (DCA)','Sell (Tactical)','Sell (Legacy)']) // sells can carry their profit part, for tax time
+const BUY_SET = new Set(['DCA Buy','Tactical Buy']) // money that changed shape, not money gone
+let ACCOUNTS = [], PARKING = [] // cash pots, and Scalable/Tagesgeld which only some modes offer
+
+// Scalable and Tagesgeld appear when transferring (parking on a red light) or investing
+// (gold is paid from Scalable) — the same rule the laptop's QuickLog follows.
+function renderAccountOptions(){
+  const wide = mode.id==='transfer' || mode.id==='invest'
+  const list = wide ? [...ACCOUNTS, ...PARKING] : ACCOUNTS
+  const opts = list.map(a=>`<option value="${a.id}">${a.name}</option>`).join('')
+  const accSel=$('account'), toSel=$('toAccount')
+  const keep=accSel.value, keepTo=toSel.value
+  accSel.innerHTML=opts; toSel.innerHTML=opts
+  if (keep && list.some(a=>String(a.id)===keep)) accSel.value=keep
+  if (keepTo && list.some(a=>String(a.id)===keepTo)) toSel.value=keepTo
+}
 let mode = MODES[0], type = null
 let riskPct = 0.01
 
@@ -290,6 +319,7 @@ function renderModes(){
   if (!FEE_TYPES.has(type)) $('fee').value=''
   $('gain-row').classList.toggle('hidden', !SELL_SET.has(type))
   if (!SELL_SET.has(type)) $('gain').value=''
+  renderAccountOptions() // transfer/invest can reach Scalable and Tagesgeld, the others can't
   validate()
 }
 // earning sources: the log records the take-home (gross − fee) — what actually lands in the account
@@ -533,8 +563,14 @@ function render(){
     $('growth-now').textContent = euro(g.close)
     $('growth-change').innerHTML = g.change===null||g.change===undefined ? ''
       : `<b style="color:${col(g.change)};font-size:15px">${sgn(g.change)}</b>${g.pct!==null&&g.pct!==undefined?` <span class="muted">(${g.pct>0?'+':''}${g.pct.toFixed(1)}%)</span>`:''}`
+    // cash never moves by itself, so its leftover is shown as "not logged", not as growth
+    const hasSplit = g.market!==null && g.market!==undefined
     $('growth-split').innerHTML = (g.byItself===null||g.byItself===undefined) ? ''
-      : `you put in <b class="ink">${sgn(g.moved)}</b> · grew by itself <b style="color:${col(g.byItself)}">${sgn(g.byItself)}</b>`
+      : hasSplit
+        ? `you put in <b class="ink">${sgn(g.moved)}</b> · market <b style="color:${col(g.market)}">${sgn(g.market)}</b>`
+          + ((g.unlogged!==null && g.unlogged!==undefined && g.unlogged!==0)
+            ? ` · <span class="amber">not logged <b>${sgn(g.unlogged)}</b></span>` : '')
+        : `you put in <b class="ink">${sgn(g.moved)}</b> · grew by itself <b style="color:${col(g.byItself)}">${sgn(g.byItself)}</b>`
     $('growth-accounts').innerHTML = (g.accounts||[])
       .map(a => `<div class="row"><span>${a.name}</span><span class="flexr" style="gap:10px">
         <span class="muted">${a.balance===null||a.balance===undefined?'—':euro(a.balance)}</span>
@@ -546,7 +582,10 @@ function render(){
     ? '<div class="small muted" style="padding:6px 2px">Nothing logged this month yet.</div>'
     : entries.map(t => {
         const sign = t.direction==='OUT' ? '−' : t.direction==='IN' ? '+' : ''
-        const color = t.direction==='OUT' ? 'var(--rose)' : t.direction==='IN' ? 'var(--green)' : 'var(--violet)'
+        // a buy keeps its minus — the cash really did leave — but wears the invest colour,
+        // because that money changed shape rather than disappearing (same rule as the laptop)
+        const color = BUY_SET.has(t.type) ? 'var(--blue)'
+          : t.direction==='OUT' ? 'var(--rose)' : t.direction==='IN' ? 'var(--green)' : 'var(--violet)'
         const label = t.direction==='TRANSFER' ? `${t.account} → ${t.toAccount||'?'}` : (t.category ? `${t.type} · ${t.category}` : t.type)
         const emoji = EMOJI[t.category] || EMOJI[t.type] || ''
         const note = t.note ? ` <span class="small muted">${t.note}</span>` : ''
@@ -554,13 +593,71 @@ function render(){
         return `<div class="row"><span style="flex:1"><b>${emoji} ${label}</b>${gain}${note}<div class="small muted">${t.date} · ${t.account}</div></span>
           <b style="color:${color};white-space:nowrap">${sign}${euro(t.amount)}</b></div>`
       }).join('')
+  renderWhere(entries)
   $('accounts').innerHTML = (s.cashAccounts||[]).map(a =>
     `<div class="row"><span>${a.name}${a.excluded?' <span class="small muted">excluded</span>':''}</span><b>${euro(a.balance)}</b></div>`).join('')
-  const accSel=$('account'), toSel=$('toAccount')
-  const opts=(s.cashAccounts||[]).map(a=>`<option value="${a.id}">${a.name}</option>`).join('')
-  const keep=accSel.value; accSel.innerHTML=opts; toSel.innerHTML=opts; if (keep) accSel.value=keep
+  // Transfers and investing can also touch Scalable / Tagesgeld — parking trading money on a
+  // red light, or paying for gold — exactly as the laptop allows.
+  ACCOUNTS = s.cashAccounts || []
+  PARKING = s.parkingAccounts || []
+  renderAccountOptions()
   if (tab==='trading') renderTrading()
   validate()
+}
+
+// ── Where it went — the same two views as the laptop, off the same entries ──
+// €112 out of Cash is a different story from €112 out of TR Cash, so each row says both.
+const EXPENSE_SET = new Set(MODES[0].types)
+let whereBy = 'category'
+let whereEntries = []
+
+function setWhere(k){
+  whereBy = k
+  $('where-cat').className = 'chip' + (k==='category'?' on':'')
+  $('where-acc').className = 'chip' + (k==='account'?' on':'')
+  renderWhere(whereEntries)
+}
+
+function renderWhere(entries){
+  whereEntries = entries || []
+  const groups = new Map()
+  for (const t of whereEntries){
+    if (t.direction!=='OUT' || !EXPENSE_SET.has(t.type)) continue // exactly what the month counts as spending
+    const outer = whereBy==='category' ? t.type : (t.account||'—')
+    const inner = whereBy==='category' ? (t.account||'—') : t.type
+    const g = groups.get(outer) || new Map()
+    g.set(inner, (g.get(inner)||0) + t.amount)
+    groups.set(outer, g)
+  }
+  const rows = [...groups.entries()].map(([key, parts]) => ({
+    key,
+    amount: r2([...parts.values()].reduce((s,v)=>s+v,0)),
+    parts: [...parts.entries()].map(([k,v])=>({key:k, amount:r2(v)})).sort((a,b)=>b.amount-a.amount)
+  })).sort((a,b)=>b.amount-a.amount)
+
+  const head = $('where-head'), card = $('where')
+  if (rows.length===0){ head.classList.add('hidden'); card.classList.add('hidden'); return }
+  head.classList.remove('hidden'); card.classList.remove('hidden')
+  const max = rows[0].amount
+  const total = r2(rows.reduce((s,r)=>s+r.amount,0))
+  // money moved between her own pots — never spending, never growth, but a pot that emptied
+  // should say where it went instead of looking like a leak
+  const routes = new Map()
+  for (const t of whereEntries){
+    if (t.direction!=='TRANSFER') continue
+    const k = `${t.account||'—'} → ${t.toAccount||'—'}`
+    routes.set(k, (routes.get(k)||0) + t.amount)
+  }
+  const moved = [...routes.entries()].map(([k,v])=>({key:k, amount:r2(v)})).sort((a,b)=>b.amount-a.amount)
+
+  card.innerHTML = rows.map(r => `<div style="margin-bottom:11px">
+      <div class="flexr" style="justify-content:space-between"><b>${EMOJI[r.key]||''} ${r.key}</b><b>${euro(r.amount)}</b></div>
+      <div class="bar"><i style="width:${max?Math.round(r.amount/max*100):0}%"></i></div>
+      <div class="small muted" style="margin-top:3px">${r.parts.map(p=>`${p.key} ${euro(p.amount)}`).join(' · ')}</div>
+    </div>`).join('')
+    + `<div class="row" style="border-top:1px solid var(--line);padding-top:8px"><span class="muted">Total spent</span><b>${euro(total)}</b></div>`
+    + (moved.length===0 ? '' : `<div class="small muted" style="margin-top:9px">Moved between your own pots — not spending:<br>`
+        + moved.map(m=>`${m.key} <b class="ink">${euro(m.amount)}</b>`).join(' · ') + `</div>`)
 }
 
 boot()
