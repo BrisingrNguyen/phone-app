@@ -267,12 +267,26 @@ window.connect = async () => {
 }
 window.signOut = async () => { if (sb) await sb.auth.signOut(); localStorage.removeItem(LS.cfg); location.reload() }
 
+// If she is signed out with entries still queued, the setup screen must say so — otherwise
+// her unsent tips are invisible behind a Connect button and she has no reason to press it.
+function warnUnsentOnSetup(){
+  const n = queue().length
+  if (!n) return
+  const b = document.createElement('div')
+  b.className = 'banner'
+  b.style.borderLeftColor = 'var(--amber)'
+  b.innerHTML = `<b>${n} entr${n===1?'y is':'ies are'} still on this phone</b> — they haven't reached the laptop.
+    Connect below and they'll send straight away. Nothing is lost.`
+  $('setup').prepend(b)
+}
+
 async function boot(){
   const c = cfg()
-  if (!c){ $('setup').classList.remove('hidden'); return }
+  if (!c){ $('setup').classList.remove('hidden'); warnUnsentOnSetup(); return }
   if (!sb) sb = createClient(c.url, c.key)
-  const { data } = await sb.auth.getSession()
-  if (!data.session){ $('setup').classList.remove('hidden'); return }
+  let data = null
+  try { ({ data } = await sb.auth.getSession()) } catch { /* offline — fall through to setup */ }
+  if (!data || !data.session){ $('setup').classList.remove('hidden'); warnUnsentOnSetup(); return }
   $('setup').classList.add('hidden'); $('app').classList.remove('hidden')
   $('date').value = new Date().toISOString().slice(0,10)
   $('c-setup').innerHTML = SETUPS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')
@@ -281,7 +295,9 @@ async function boot(){
   if (cached){ try { snapshot = JSON.parse(cached); render() } catch {} }
   renderPending()
   await flushQueue(); await refresh()
-  setInterval(refresh, 30000)
+  // retry unsent entries on the same tick as the refresh — a failed send used to sit there
+  // until she happened to reload the page, which is how tips went missing for five days
+  setInterval(() => { flushQueue(); refresh() }, 30000)
   ;['c-entry','c-stop','c-instrument'].forEach(id => $(id).addEventListener('input', renderCalc))
   window.addEventListener('online', flushQueue)
 }
@@ -515,21 +531,46 @@ function renderWatchlist(){
 }
 
 // ── queue plumbing ──
-function enqueue(ev){ const q=queue(); q.push(ev); setQueue(q); flushQueue() }
+// Why this is careful: an entry that fails to send is invisible money. It sits in this queue
+// while she believes it is logged, and the laptop has no idea it exists. So the queue retries
+// on its own, and when it cannot send it says WHY instead of quietly waiting.
+let lastSendError = null
+function enqueue(ev){ const q=queue(); q.push(ev); setQueue(q); renderPending(); flushQueue() }
+
 async function flushQueue(){
-  const q = queue(); if (!q.length || !navigator.onLine || !sb) return
-  const { data } = await sb.auth.getSession(); if (!data.session) return
+  const q = queue()
+  if (!q.length) { lastSendError = null; renderPending(); return }
+  if (!navigator.onLine){ lastSendError = 'offline'; renderPending(); return }
+  if (!sb){ lastSendError = 'not connected'; renderPending(); return }
+  let data
+  try {
+    ({ data } = await sb.auth.getSession())
+  } catch { lastSendError = 'cannot reach the server'; renderPending(); return }
+  if (!data || !data.session){ lastSendError = 'signed out'; renderPending(); return }
+
   const remaining = []
+  let failure = null
   for (const ev of q){
-    const { error } = await sb.from('sync_events').insert({ kind:ev.kind, payload:ev.payload, user_id:data.session.user.id })
-    if (error) remaining.push(ev)
+    try {
+      const { error } = await sb.from('sync_events').insert({ kind:ev.kind, payload:ev.payload, user_id:data.session.user.id })
+      if (error){ remaining.push(ev); failure = error.message || 'the server refused it' }
+    } catch (e) { remaining.push(ev); failure = (e && e.message) || 'the send failed' }
   }
   setQueue(remaining)
+  lastSendError = remaining.length ? failure : null
+  renderPending()
 }
+
 function renderPending(){
   const n = queue().length
-  $('pending-banner').classList.toggle('hidden', n===0)
-  if (n) $('pending-banner').innerHTML = `<b>${n} item${n===1?'':'s'} waiting to send</b> — they go automatically when you're back online.`
+  const el = $('pending-banner')
+  el.classList.toggle('hidden', n===0)
+  if (!n) return
+  const why = lastSendError === 'offline' ? "you're offline — they'll go when you have signal"
+    : lastSendError === 'signed out' ? "<b>you've been signed out</b> — scroll down and Connect again to send them"
+    : lastSendError ? `couldn't send: ${lastSendError}`
+    : 'sending…'
+  el.innerHTML = `<b>${n} item${n===1?'':'s'} not on the laptop yet</b> — ${why}`
 }
 
 function render(){
