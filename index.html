@@ -184,7 +184,7 @@
       <div class="h2">Recent trades</div>
       <div class="card" id="recent-trades"></div>
 
-      <div class="h2">This week's watchlist <span id="watch-week" class="muted" style="text-transform:none;letter-spacing:0"></span></div>
+      <div class="h2">Watchlist <span id="watch-week" class="muted" style="text-transform:none;letter-spacing:0"></span></div>
       <div class="card" id="watchlist"></div>
     </div>
 
@@ -237,6 +237,13 @@ let riskPct = 0.01
 const SETUPS = [['','— setup —'],['DD','Double Doji'],['FB','First Break'],['SB','Second Break'],['BB','Block Break'],['RB','Range Break'],['IRB','Inside Range Break'],['ARB','Advanced Range Break'],['VCP','Volatility Contraction'],['DTB','Double Top Buy'],['TTB','Triple Top Buy'],['CAT','Bullish Catapult'],['TL45','45° Trendline Break']]
 
 const $ = (id) => document.getElementById(id)
+// Today on HER clock. toISOString() is UTC, which is still yesterday until 02:00 in Germany —
+// she logs tips after an evening shift, squarely inside that window, and they were being dated
+// a day early. Matches localDate() in shared/dates.ts on the laptop.
+const localDate = (d = new Date()) => {
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`
+}
 const euro = (v,d=2) => (v<0?'−':'') + '€' + Math.abs(v).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 const r2 = (v) => Math.round((v + (v>=0?1e-9:-1e-9)) * 100) / 100
 const r4 = (v) => Math.round((v + (v>=0?1e-9:-1e-9)) * 10000) / 10000
@@ -267,6 +274,20 @@ window.connect = async () => {
 }
 window.signOut = async () => { if (sb) await sb.auth.signOut(); localStorage.removeItem(LS.cfg); location.reload() }
 
+/**
+ * Sign back in without losing anything: the Connect card comes back with everything filled in
+ * except the password, and the queue is untouched. Reached from the banner when the session
+ * has lapsed — she should never have to disconnect (and lose queued entries) to fix that.
+ */
+window.reconnect = () => {
+  const c = cfg() || {}
+  $('s-url').value = c.url || ''; $('s-key').value = c.key || ''; $('s-email').value = c.email || ''
+  $('s-pass').value = ''
+  $('app').classList.add('hidden'); $('setup').classList.remove('hidden')
+  warnUnsentOnSetup()
+  return false
+}
+
 // If she is signed out with entries still queued, the setup screen must say so — otherwise
 // her unsent tips are invisible behind a Connect button and she has no reason to press it.
 function warnUnsentOnSetup(){
@@ -282,18 +303,31 @@ function warnUnsentOnSetup(){
 
 async function boot(){
   const c = cfg()
+  // Only a phone that has never been set up sees the Connect wall.
   if (!c){ $('setup').classList.remove('hidden'); warnUnsentOnSetup(); return }
   if (!sb) sb = createClient(c.url, c.key)
-  let data = null
-  try { ({ data } = await sb.auth.getSession()) } catch { /* offline — fall through to setup */ }
-  if (!data || !data.session){ $('setup').classList.remove('hidden'); warnUnsentOnSetup(); return }
+
+  // Open the app FIRST, before asking the server anything.
+  //
+  // Logging must never depend on being online or signed in. She is usually outside with the
+  // laptop shut and patchy signal when she has a tip to record — that is the whole reason the
+  // phone exists. A session check that blocks the screen turns a moment of "log it now" into
+  // "I couldn't", and the money goes unrecorded. Everything she types is queued locally and
+  // sent whenever the connection comes back; the numbers on screen come from the last cached
+  // snapshot and say how old they are.
   $('setup').classList.add('hidden'); $('app').classList.remove('hidden')
-  $('date').value = new Date().toISOString().slice(0,10)
+  $('date').value = localDate()
   $('c-setup').innerHTML = SETUPS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')
   setRisk('green'); renderModes()
   const cached = localStorage.getItem(LS.snap)
   if (cached){ try { snapshot = JSON.parse(cached); render() } catch {} }
   renderPending()
+
+  // now find out where we stand with the server — after she can already type
+  let session = null
+  try { const { data } = await sb.auth.getSession(); session = data && data.session } catch { /* offline */ }
+  if (!session){ lastSendError = navigator.onLine ? 'signed out' : 'offline'; renderPending() }
+
   await flushQueue(); await refresh()
   // retry unsent entries on the same tick as the refresh — a failed send used to sit there
   // until she happened to reload the page, which is how tips went missing for five days
@@ -428,7 +462,7 @@ function renderCalc(){
 }
 window.logTrade = () => {
   const b = $('c-log')
-  const payload = { date:new Date().toISOString().slice(0,10), instrument:$('c-instrument').value.trim(),
+  const payload = { date:localDate(), instrument:$('c-instrument').value.trim(),
     light: riskPct>=0.01?'Green':'Yellow', setup:$('c-setup').value||null,
     entry:Number(b.dataset.entry), stop:Number(b.dataset.stop), size:Number(b.dataset.size), note:null }
   enqueue({ kind:'tradeAdd', payload })
@@ -510,6 +544,12 @@ function renderRecentTrades(){
   }).join('')
 }
 
+// this week's names, then every earlier week she has — collapsed, newest first, exactly the
+// way the laptop shows them. Read-only here: the watchlist is written during the Sunday
+// routine, and the laptop stays the source of truth.
+let watchHistoryOpen = false
+window.toggleWatchHistory = () => { watchHistoryOpen = !watchHistoryOpen; renderWatchlist(); return false }
+
 function renderWatchlist(){
   const sc = snapshot?.scan || {}
   const wl = snapshot?.watchlist || []
@@ -518,16 +558,48 @@ function renderWatchlist(){
   const lights = (sc.bigCapLight||sc.smallMidLight)
     ? `<div class="small" style="margin-bottom:8px">Big-cap ${lightDot(sc.bigCapLight)||'—'} · Breadth ${lightDot(sc.smallMidLight)||'—'}${sc.sectors?` · <span class="muted">${sc.sectors}</span>`:''}</div>`
     : ''
-  if (wl.length===0){
-    $('watchlist').innerHTML = lights + '<div class="small muted" style="padding:6px 2px">No names yet — an empty watchlist is a valid watchlist.</div>'
-    return
-  }
-  $('watchlist').innerHTML = lights + wl.map(w => {
+
+  const row = (w) => {
     const tags = [w.capType, w.sector, w.timeframe].filter(Boolean).join(' · ')
     const note = w.note ? `<div class="small muted">${w.note}</div>` : ''
     return `<div class="row" style="flex-wrap:wrap"><span style="flex:1;min-width:150px">
       <b>${lightDot(w.light)} ${w.instrument}</b>${tags?` <span class="small muted">${tags}</span>`:''}${note}</span></div>`
-  }).join('')
+  }
+
+  // older entries carry a week; anything without one is treated as this week (older snapshots)
+  const thisWeek = wl.filter(w => !w.week || w.week === currentWeekKey())
+  const older = wl.filter(w => w.week && w.week !== currentWeekKey())
+  const weeks = [...new Set(older.map(w => w.week))].sort().reverse()
+  const dayLabel = (iso) => {
+    const [y,m,d] = iso.split('-').map(Number)
+    return new Date(y, m-1, d).toLocaleDateString('en-GB', { day:'2-digit', month:'short' })
+  }
+
+  const head = thisWeek.length === 0
+    ? '<div class="small muted" style="padding:6px 2px">No names this week — an empty watchlist is a valid watchlist.</div>'
+    : thisWeek.map(row).join('')
+
+  const history = weeks.length === 0 ? '' :
+    `<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">
+       <a href="#" onclick="return toggleWatchHistory()" style="color:var(--blue);font-weight:700;font-size:13px">
+         ${watchHistoryOpen ? '▾ hide earlier weeks' : `▸ earlier weeks · ${older.length} name${older.length===1?'':'s'}`}
+       </a>
+       ${watchHistoryOpen ? weeks.map(wk => `
+         <div style="margin-top:9px">
+           <div class="small muted" style="font-weight:700;text-transform:uppercase;letter-spacing:.04em">Week of ${dayLabel(wk)}</div>
+           ${older.filter(w => w.week === wk).map(row).join('')}
+         </div>`).join('') : ''}
+     </div>`
+
+  $('watchlist').innerHTML = lights + head + history
+}
+
+/** The Sunday that starts this week — same rule as the laptop's weekOf(). */
+function currentWeekKey(){
+  const d = new Date()
+  const sun = new Date(d)
+  sun.setDate(d.getDate() - d.getDay())
+  return localDate(sun)
 }
 
 // ── queue plumbing ──
@@ -535,7 +607,22 @@ function renderWatchlist(){
 // while she believes it is logged, and the laptop has no idea it exists. So the queue retries
 // on its own, and when it cannot send it says WHY instead of quietly waiting.
 let lastSendError = null
-function enqueue(ev){ const q=queue(); q.push(ev); setQueue(q); renderPending(); flushQueue() }
+
+/**
+ * A stable id created on THIS phone, before anything is sent.
+ *
+ * On a patchy connection an insert can succeed while the reply is lost. The entry then looks
+ * unsent, gets retried, and arrives twice — a tip logged double, which is worse than one
+ * logged late. The laptop skips any id it has already applied, so a retry is harmless.
+ */
+function newId(){
+  try { if (crypto && crypto.randomUUID) return crypto.randomUUID() } catch {}
+  return 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10)
+}
+
+function enqueue(ev){
+  const q=queue(); q.push({ ...ev, cid: ev.cid || newId() }); setQueue(q); renderPending(); flushQueue()
+}
 
 async function flushQueue(){
   const q = queue()
@@ -552,7 +639,9 @@ async function flushQueue(){
   let failure = null
   for (const ev of q){
     try {
-      const { error } = await sb.from('sync_events').insert({ kind:ev.kind, payload:ev.payload, user_id:data.session.user.id })
+      // the id rides inside the payload, so no change is needed to the cloud table
+      const payload = ev.cid ? { ...ev.payload, _cid: ev.cid } : ev.payload
+      const { error } = await sb.from('sync_events').insert({ kind:ev.kind, payload, user_id:data.session.user.id })
       if (error){ remaining.push(ev); failure = error.message || 'the server refused it' }
     } catch (e) { remaining.push(ev); failure = (e && e.message) || 'the send failed' }
   }
@@ -566,11 +655,11 @@ function renderPending(){
   const el = $('pending-banner')
   el.classList.toggle('hidden', n===0)
   if (!n) return
-  const why = lastSendError === 'offline' ? "you're offline — they'll go when you have signal"
-    : lastSendError === 'signed out' ? "<b>you've been signed out</b> — scroll down and Connect again to send them"
-    : lastSendError ? `couldn't send: ${lastSendError}`
+  const why = lastSendError === 'offline' ? "you're offline — they'll go on their own when you have signal"
+    : lastSendError === 'signed out' ? `<b>you've been signed out</b> — <a href="#" onclick="return reconnect()"><b>sign in again</b></a> and they'll send straight away`
+    : lastSendError ? `couldn't send yet: ${lastSendError} — it keeps trying`
     : 'sending…'
-  el.innerHTML = `<b>${n} item${n===1?'':'s'} not on the laptop yet</b> — ${why}`
+  el.innerHTML = `<b>${n} item${n===1?'':'s'} not on the laptop yet</b> — ${why}. Nothing is lost.`
 }
 
 function render(){
