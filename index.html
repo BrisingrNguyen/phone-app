@@ -559,12 +559,19 @@ function renderWatchlist(){
     ? `<div class="small" style="margin-bottom:8px">Big-cap ${lightDot(sc.bigCapLight)||'—'} · Breadth ${lightDot(sc.smallMidLight)||'—'}${sc.sectors?` · <span class="muted">${sc.sectors}</span>`:''}</div>`
     : ''
 
+  // the same 1-2-3 rank as the laptop: 1 is what she said she would buy first
+  const PRIO = { 1: 'var(--green)', 2: 'var(--amber)', 3: 'var(--muted)' }
+  const prioDot = (p) => PRIO[p]
+    ? `<span style="display:inline-grid;place-items:center;width:19px;height:19px;border-radius:50%;background:${PRIO[p]};color:#fff;font-size:11px;font-weight:700;flex:none">${p}</span>`
+    : ''
   const row = (w) => {
     const tags = [w.capType, w.sector, w.timeframe].filter(Boolean).join(' · ')
     const note = w.note ? `<div class="small muted">${w.note}</div>` : ''
-    return `<div class="row" style="flex-wrap:wrap"><span style="flex:1;min-width:150px">
-      <b>${lightDot(w.light)} ${w.instrument}</b>${tags?` <span class="small muted">${tags}</span>`:''}${note}</span></div>`
+    return `<div class="row" style="flex-wrap:wrap"><span class="flexr" style="flex:1;min-width:150px;align-items:flex-start">
+      ${prioDot(w.priority)}<span style="flex:1"><b>${lightDot(w.light)} ${w.instrument}</b>${tags?` <span class="small muted">${tags}</span>`:''}${note}</span></span></div>`
   }
+  // rated names first within a week, unrated last — matching the laptop's ordering
+  const byPrio = (a, b) => (a.priority || 9) - (b.priority || 9)
 
   // older entries carry a week; anything without one is treated as this week (older snapshots)
   const thisWeek = wl.filter(w => !w.week || w.week === currentWeekKey())
@@ -575,6 +582,7 @@ function renderWatchlist(){
     return new Date(y, m-1, d).toLocaleDateString('en-GB', { day:'2-digit', month:'short' })
   }
 
+  thisWeek.sort(byPrio); older.sort(byPrio)
   const head = thisWeek.length === 0
     ? '<div class="small muted" style="padding:6px 2px">No names this week — an empty watchlist is a valid watchlist.</div>'
     : thisWeek.map(row).join('')
