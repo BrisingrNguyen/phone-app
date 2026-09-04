@@ -47,6 +47,13 @@
   .stat .l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
   .stat .v{font-size:15px;font-weight:700}
   .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+  .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:6px}
+  /* the three buckets as one stacked bar — the proportion IS the finding, so it is drawn as
+     a proportion rather than as three numbers to compare by eye */
+  .stack{display:flex;height:11px;border-radius:999px;overflow:hidden;background:var(--soft)}
+  .stack>i{display:block;height:100%}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:999px;margin-right:5px;vertical-align:middle}
+  .tag{font-size:10px;border:1px solid var(--line);border-radius:999px;padding:1px 6px;margin-left:5px;vertical-align:middle}
   .hidden{display:none!important}
   .tabs{display:flex;gap:6px;margin-top:12px}
   .tab{flex:1;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px;text-align:center;font-weight:700;font-size:14px;color:var(--muted)}
@@ -137,7 +144,13 @@
         <div class="small muted" id="growth-split" style="text-align:center;margin-top:4px"></div>
         <div id="growth-accounts" style="margin-top:10px"></div>
       </div>
-      <div class="card"><div class="grid3" id="month"></div></div>
+      <div class="card">
+        <div class="grid3" id="month"></div>
+        <!-- kept vs moved: what was LEFT at the end of the month, and what actually WENT
+             somewhere. Two different numbers, and the space between them is the point. -->
+        <div class="grid2" id="rates" style="margin-top:8px"></div>
+        <div class="small muted" id="rate-gap" style="text-align:center;margin-top:6px"></div>
+      </div>
 
       <div class="h2">Entries this month</div>
       <div class="card" id="entries"></div>
@@ -149,6 +162,9 @@
         </span>
       </div>
       <div class="card" id="where"></div>
+
+      <div class="h2 hidden" id="alltime-head">Since you started</div>
+      <div class="card hidden" id="alltime"></div>
 
       <div class="h2">Cash accounts</div>
       <div class="card" id="accounts"></div>
@@ -215,8 +231,8 @@ let sb = null, snapshot = null, tab = 'money'
 
 // ── money log config ──
 const MODES = [
-  { id:'out',      label:'Spent',    emoji:'💸', color:'var(--rose)',   types:['Rent','Groceries','Food/Drinks','Transport','Phone','Subscriptions','Personal Care','Household','Clothes','Entertainment','Travel','Other'] },
-  { id:'in',       label:'Received', emoji:'💰', color:'var(--green)',  types:['Tip','Salary','Bonus','Freelance','Gift','Refund','Interest','Other'] },
+  { id:'out',      label:'Out (spent)', emoji:'💸', color:'var(--rose)',   types:['Rent','Groceries','Food/Drinks','Transport','Phone','Subscriptions','Personal Care','Household','Clothes','Entertainment','Travel','Other'] },
+  { id:'in',       label:'In (received)', emoji:'💰', color:'var(--green)',  types:['Tip','Salary','Bonus','Freelance','Gift','Refund','Interest','Other'] },
   { id:'invest',   label:'Invest',   emoji:'📈', color:'var(--blue)',   types:['DCA Buy','Tactical Buy','Sell (DCA)','Sell (Tactical)','Sell (Legacy)','Joint Contribution'] },
   { id:'transfer', label:'Transfer', emoji:'↔️', color:'var(--violet)', types:['Transfer'] }
 ]
@@ -413,7 +429,10 @@ window.logIt = async () => {
   const feeNote = (isEarn && fee>0) ? `gross ${euro(gross)} − fee ${euro(r2(fee))}` : null
   const userNote = $('note').value.trim()||null
   const g = gainVal()
-  const payload = { date:$('date').value, type, amount:amt, accountId:Number($('account').value),
+  // the mode she pressed travels with the entry — 'Other' lives in both the earn and spend lists,
+  // so letting the laptop infer it from the type turned a spend into income
+  const dir = mode.id==='transfer' ? 'TRANSFER' : mode.id==='in' ? 'IN' : mode.id==='out' ? 'OUT' : undefined
+  const payload = { date:$('date').value, type, direction:dir, amount:amt, accountId:Number($('account').value),
     categoryOrAsset:null, note:[feeNote,userNote].filter(Boolean).join(' · ')||null, toAccountId: mode.id==='transfer'?Number($('toAccount').value):null,
     gain: (g!==null && Number.isFinite(g)) ? g : null }
   $('amount').value=''; $('fee').value=''; $('gain').value=''; $('note').value=''; type = mode.id==='transfer'?'Transfer':null; renderModes()
@@ -699,6 +718,9 @@ function render(){
   $('month').innerHTML = ['Income','Expenses','Invested'].map((l,i)=>{
     const v=[m.income,m.expenses,m.invested][i]||0, c=['var(--green)','var(--rose)','var(--blue)'][i]
     return `<div class="stat"><div class="l">${l}</div><div class="v" style="color:${c}">${euro(v)}</div></div>` }).join('')
+  renderRates(m)
+  renderBuckets(s.buckets)
+  renderAllTime(s.allTime)
   // the same month view as the laptop's Home: money now vs the last count of last month
   const g = s.growth
   if (!g || g.close===null || g.close===undefined){
@@ -850,11 +872,104 @@ const EXPENSE_SET = new Set(MODES[0].types)
 let whereBy = 'category'
 let whereEntries = []
 
-function setWhere(k){
+/**
+ * NOTE: assigned to `window`, not declared as a plain function.
+ *
+ * This script is `type="module"`, so a top-level `function setWhere()` is module-scoped and the
+ * inline `onclick="setWhere('account')"` on the two chips cannot see it — the toggle silently
+ * threw and the view never switched. Every other inline handler in this file is on `window` for
+ * exactly this reason; this one was missed.
+ */
+window.setWhere = (k) => {
   whereBy = k
   $('where-cat').className = 'chip' + (k==='category'?' on':'')
   $('where-acc').className = 'chip' + (k==='account'?' on':'')
   renderWhere(whereEntries)
+}
+
+/**
+ * Kept and Moved — two savings rates, not one.
+ *
+ * `savingsRate` is what survived the month; `investedRate` is what actually went somewhere. They
+ * are NOT a part and a whole: sparplans run on the 1st out of money she already holds, so Moved
+ * can exceed Kept and can exceed 100%. Both figures come straight from the snapshot, computed by
+ * the same monthSummary the laptop uses — the phone never derives a rate of its own.
+ */
+function renderRates(m){
+  const has = m && typeof m.savingsRate === 'number' && typeof m.investedRate === 'number'
+  if (!has){ $('rates').innerHTML=''; $('rate-gap').innerHTML=''; return }
+  const pct = (v) => `${Math.round(v*100)}%`
+  $('rates').innerHTML =
+    `<div class="stat"><div class="l">Kept</div><div class="v" style="color:var(--violet)">${pct(m.savingsRate)}</div></div>`
+  + `<div class="stat"><div class="l">Moved</div><div class="v" style="color:var(--blue)">${pct(m.investedRate)}</div></div>`
+
+  if (!m.income){ $('rate-gap').innerHTML=''; return }
+  const left = r2((m.income||0) - (m.expenses||0) - (m.joint||0))
+  const inv  = m.invested||0
+  const gap  = r2(left - inv)
+  let txt = ''
+  if (left > 0 && gap > 0.5) txt = `You had <b>${euro(left)}</b> left and moved <b>${euro(inv)}</b> of it — the other <b>${euro(gap)}</b> is still sitting in your accounts.`
+  else if (left > 0 && Math.abs(gap) <= 0.5) txt = 'Everything you kept this month went somewhere.'
+  else if (gap < -0.5 && inv > 0) txt = left > 0
+    ? `You moved <b>${euro(inv)}</b> into investments — more than the <b>${euro(left)}</b> this month left over, so <b>${euro(r2(-gap))}</b> of it came from money you already had.`
+    : `You moved <b>${euro(inv)}</b> into investments while spending more than came in, so it came from money you already had.`
+  else if (left <= 0 && inv === 0) txt = 'You spent more than came in this month, so there was nothing left to move.'
+  $('rate-gap').innerHTML = txt
+}
+
+/**
+ * The three buckets, drawn at the top of "Where it went".
+ *
+ * Every figure here is computed on the laptop and sent ready to draw — the phone holds no copy
+ * of the category-to-bucket map. One fact, one place, exactly as with every other number here.
+ */
+let bucketRows = []
+function renderBuckets(b){ bucketRows = (b||[]).filter(x=>x.amount>0); renderWhere(whereEntries) }
+
+function bucketBar(rows){
+  if (!rows || rows.length===0) return ''
+  return `<div class="stack">${rows.map(b=>`<i style="width:${(b.pct*100).toFixed(2)}%;background:${b.color}"></i>`).join('')}</div>`
+    + `<div class="small" style="margin-top:6px">`
+    + rows.map(b=>`<span style="margin-right:12px;white-space:nowrap"><span class="dot" style="background:${b.color}"></span><b>${b.label}</b> ${euro(b.amount)} <span class="muted">${Math.round(b.pct*100)}%</span></span>`).join('')
+    + `</div>`
+}
+
+/**
+ * Where it has gone since she started — collapsed, because this tab is about the month in front
+ * of her. The headline total shows without opening it, so the toggle is never a blind link.
+ */
+let allTimeOpen = false
+let allTimeData = null
+// on `window` for the same reason as setWhere above — module scope hides plain declarations
+window.toggleAllTime = () => { allTimeOpen = !allTimeOpen; renderAllTime(allTimeData) }
+function renderAllTime(a){
+  allTimeData = a
+  const head = $('alltime-head'), card = $('alltime')
+  if (!a || !a.rows || a.rows.length===0){ head.classList.add('hidden'); card.classList.add('hidden'); return }
+  head.classList.remove('hidden'); card.classList.remove('hidden')
+  const mLabel = (x) => x ? new Date(x+'-01').toLocaleDateString('en-GB',{month:'short',year:'2-digit'}) : ''
+  const max = a.rows[0].amount
+  const colorOf = (k) => (a.buckets.find(b=>b.bucket===k)||{}).color || 'var(--muted)'
+  const labelOf = (k) => (a.buckets.find(b=>b.bucket===k)||{}).label || ''
+
+  card.innerHTML =
+    `<div class="row" style="border-bottom:none;padding-top:0" onclick="toggleAllTime()">
+       <span><b>${euro(a.total)}</b> <span class="muted">across ${a.months} ${a.months===1?'month':'months'}${a.from?` · ${mLabel(a.from)} → ${mLabel(a.to)}`:''}</span></span>
+       <span style="color:var(--blue);font-weight:700">${allTimeOpen?'▾':'▸'}</span>
+     </div>`
+    + (!allTimeOpen ? '' :
+        `<div style="margin-top:10px">${bucketBar(a.buckets.filter(b=>b.amount>0))}</div>`
+      + `<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">`
+      + a.rows.map((r,i)=>`<div style="margin-bottom:11px">
+            <div class="flexr" style="justify-content:space-between">
+              <span><span class="muted small">${i+1}</span> <b>${EMOJI[r.key]||''} ${r.key}</b><span class="tag" style="color:${colorOf(r.bucket)}">${labelOf(r.bucket)}</span></span>
+              <b style="white-space:nowrap">${euro(r.amount)}</b>
+            </div>
+            <div class="bar"><i style="width:${max?Math.round(r.amount/max*100):0}%;background:${colorOf(r.bucket)}"></i></div>
+            <div class="small muted" style="margin-top:3px">${(r.pct*100).toFixed(1)}% of everything · about ${euro(r.perMonth)} a month · ${r.n} ${r.n===1?'entry':'entries'}</div>
+          </div>`).join('')
+      + `</div>`
+      + `<div class="small muted" style="border-top:1px solid var(--line);padding-top:8px">A month here means a month you actually logged spending in (${a.months}), not the whole span. Investing is not in this list — a DCA buy is money you still have, in another shape.</div>`)
 }
 
 function renderWhere(entries){
@@ -879,6 +994,11 @@ function renderWhere(entries){
   head.classList.remove('hidden'); card.classList.remove('hidden')
   const max = rows[0].amount
   const total = r2(rows.reduce((s,r)=>s+r.amount,0))
+  // the buckets sit above the bars, and only in category mode — "from which pot" is a different
+  // question and a split by choice would say nothing about it
+  const split = whereBy==='category' && bucketRows.length>0
+    ? `<div style="margin-bottom:12px;padding-bottom:11px;border-bottom:1px solid var(--line)">${bucketBar(bucketRows)}</div>`
+    : ''
   // money moved between her own pots — never spending, never growth, but a pot that emptied
   // should say where it went instead of looking like a leak
   const routes = new Map()
@@ -889,7 +1009,7 @@ function renderWhere(entries){
   }
   const moved = [...routes.entries()].map(([k,v])=>({key:k, amount:r2(v)})).sort((a,b)=>b.amount-a.amount)
 
-  card.innerHTML = rows.map(r => `<div style="margin-bottom:11px">
+  card.innerHTML = split + rows.map(r => `<div style="margin-bottom:11px">
       <div class="flexr" style="justify-content:space-between"><b>${EMOJI[r.key]||''} ${r.key}</b><b>${euro(r.amount)}</b></div>
       <div class="bar"><i style="width:${max?Math.round(r.amount/max*100):0}%"></i></div>
       <div class="small muted" style="margin-top:3px">${r.parts.map(p=>`${p.key} ${euro(p.amount)}`).join(' · ')}</div>
