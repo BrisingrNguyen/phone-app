@@ -128,6 +128,9 @@
         <div id="goals" style="margin-top:10px"></div>
       </div>
 
+      <div class="h2 hidden" id="have-head">Your accounts <span class="muted" style="text-transform:none;letter-spacing:0">· pots · free · vs end of last month</span></div>
+      <div class="card hidden" id="have"></div>
+
       <div class="h2 hidden" id="week-head">Your week</div>
       <div class="card hidden" id="week"></div>
 
@@ -166,8 +169,6 @@
       <div class="h2 hidden" id="alltime-head">Since you started</div>
       <div class="card hidden" id="alltime"></div>
 
-      <div class="h2">Cash accounts</div>
-      <div class="card" id="accounts"></div>
     </div>
 
     <!-- TRADING TAB -->
@@ -742,11 +743,10 @@ function render(){
           + ((g.unlogged!==null && g.unlogged!==undefined && g.unlogged!==0)
             ? ` · <span class="amber">not logged <b>${sgn(g.unlogged)}</b></span>` : '')
         : `you put in <b class="ink">${sgn(g.moved)}</b> · grew by itself <b style="color:${col(g.byItself)}">${sgn(g.byItself)}</b>`
-    $('growth-accounts').innerHTML = (g.accounts||[])
-      .map(a => `<div class="row"><span>${a.name}</span><span class="flexr" style="gap:10px">
-        <span class="muted">${a.balance===null||a.balance===undefined?'—':euro(a.balance)}</span>
-        <b style="color:${col(a.change)};min-width:78px;text-align:right">${sgn(a.change)}</b></span></div>`)
-      .join('')
+    const first = g.firstCounted || []
+    $('growth-accounts').innerHTML = g.clean === false && first.length
+      ? `<div class="small amber" style="text-align:center">${first.map(f=>f.name).join(' and ')} counted for the first time — that money was there before, so it is not growth. Only accounts counted at both ends are compared.</div>`
+      : ''
   }
   renderWeek(s.week)
   renderPlan(s.plan)
@@ -768,8 +768,7 @@ function render(){
           <b style="color:${color};white-space:nowrap">${sign}${euro(t.amount)}</b></div>`
       }).join('')
   renderWhere(entries)
-  $('accounts').innerHTML = (s.cashAccounts||[]).map(a =>
-    `<div class="row"><span>${a.name}${a.excluded?' <span class="small muted">excluded</span>':''}</span><b>${euro(a.balance)}</b></div>`).join('')
+  renderHave(s.have)
   // Transfers and investing can also touch Scalable / Tagesgeld — parking trading money on a
   // red light, or paying for gold — exactly as the laptop allows.
   ACCOUNTS = s.cashAccounts || []
@@ -777,6 +776,42 @@ function render(){
   renderAccountOptions()
   if (tab==='trading') renderTrading()
   validate()
+}
+
+// Your accounts — the very rows the laptop's Have draws (built once, on the laptop): each account
+// split into its pots and what is free, the change since the end of last month, and for
+// investments what she added versus what the holding did by itself. Striped = not mine.
+function renderHave(h){
+  const head = $('have-head'), card = $('have')
+  if (!h){ head.classList.add('hidden'); card.classList.add('hidden'); return }
+  head.classList.remove('hidden'); card.classList.remove('hidden')
+  const sgn = (v) => v===null||v===undefined ? '—' : (v===0 ? euro(0) : (v>0?'+':'−')+euro(Math.abs(v)))
+  const col = (v) => v===null||v===undefined ? 'var(--muted)' : v>0 ? 'var(--green)' : v<0 ? 'var(--rose)' : 'var(--muted)'
+  const paint = (seg) => seg.notMine
+    ? 'repeating-linear-gradient(45deg,#9c7f45 0 4px,#cdb88c 4px 8px)'
+    : seg.role==='emergency' ? '#1f5136' : '#2c5282'
+  const rows = (h.everyday||[]).map(r => {
+    const scale = Math.max(r.total, r.named) || 1
+    const bar = r.total > 0 ? r.segs.map(s => `<i style="display:inline-block;height:100%;width:${Math.min(100, s.amount/scale*100)}%;background:${paint(s)}"></i>`).join('') : ''
+    const parts = r.segs.map(s => `${s.label} ${euro(s.amount)}`).join(' · ')
+    const warn = r.over > 0 ? `<div class="small amber" style="margin-top:3px">pots promise ${euro(r.named)} but it holds ${euro(r.total)} — ${euro(r.over)} more than is there</div>` : ''
+    return `<div style="margin-bottom:10px">
+      <div class="flexr" style="justify-content:space-between"><b>${r.name}</b>
+        <span><b>${euro(r.total)}</b> <b style="color:${col(r.change)};margin-left:8px">${sgn(r.change)}</b></span></div>
+      <div style="height:9px;border-radius:99px;overflow:hidden;background:#dfe8f1;margin-top:4px;white-space:nowrap;font-size:0">${bar}</div>
+      <div class="small muted" style="margin-top:3px">${r.whole ? parts : (parts ? parts + ' · ' : '') + `<b class="ink">free ${euro(r.free)}</b>`}</div>${warn}
+    </div>`
+  }).join('')
+  const inv = (h.invested||[]).map(a => {
+    const split = (a.change!==null && a.change!==undefined && a.added!==null && a.added!==undefined)
+      ? `<div class="small muted" style="text-align:right">${a.added<0?'took out '+euro(-a.added):'added '+sgn(a.added)} · ${a.change-a.added>=0?'gain':'loss'} <b style="color:${col(a.change-a.added)}">${sgn(Math.round((a.change-a.added)*100)/100)}</b></div>` : ''
+    return `<div class="row" style="display:block"><div class="flexr" style="justify-content:space-between"><span>${a.name}</span>
+      <span><b>${euro(a.balance)}</b> <b style="color:${col(a.change)};margin-left:8px">${sgn(a.change)}</b></span></div>${split}</div>`
+  }).join('')
+  const striped = (h.everyday||[]).some(r => r.segs.some(s => s.notMine))
+  card.innerHTML = rows
+    + (striped ? `<div class="small muted" style="margin-bottom:8px">striped = not mine — in the account, not counted in your net worth</div>` : '')
+    + (inv ? `<div class="small muted" style="margin:6px 0 2px;text-transform:uppercase;letter-spacing:.05em;font-weight:700">Invested</div>${inv}` : '')
 }
 
 // The week she just had — the same four figures the laptop leads with, in the same order and the
@@ -804,7 +839,7 @@ function renderWeek(w){
       <div><div style="font-size:19px;font-weight:800;color:var(--green)">${euro(w.earned)}</div><div class="small muted">came in</div></div>
       <div><div style="font-size:19px;font-weight:800;color:var(--rose)">${euro(w.spent)}</div><div class="small muted">spent — gone</div></div>
       <div><div style="font-size:19px;font-weight:800;color:var(--blue)">${euro(w.invested)}</div><div class="small muted">invested — still yours</div></div>
-      <div><div style="font-size:19px;font-weight:800;color:var(--navy)">${euro(w.kept)}</div><div class="small muted">kept${w.keptPct!==null&&w.keptPct!==undefined?` · ${Math.round(w.keptPct)}%`:''}</div></div>
+      <div><div style="font-size:19px;font-weight:800;color:${w.kept<0?'var(--rose)':'var(--navy)'}">${euro(w.kept)}</div><div class="small muted">kept${w.keptNote?` · ${w.keptNote}`:''}</div></div>
     </div>
     <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">
       ${(w.days||[]).map(d => `<div class="flexr" style="gap:8px;padding:2px 0">
@@ -853,7 +888,7 @@ function renderPots(pots){
         <b>${p.emoji||''} ${p.name}</b>
         <span class="small"><b>${euro(p.saved)}</b></span>
       </div>
-      <div class="small muted" style="margin-top:3px">${where || 'nothing recorded'} · not yours — kept out of your net worth</div>
+      <div class="small muted" style="margin-top:3px">🔒 not mine · ${where || 'nothing recorded'} — kept out of your net worth</div>
     </div>`
     return `<div style="margin-bottom:11px">
       <div class="flexr" style="justify-content:space-between">
