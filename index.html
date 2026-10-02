@@ -40,7 +40,7 @@
   .chip-static{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12.5px;margin:0 4px 4px 0}
   .bar{height:7px;border-radius:999px;background:var(--soft);overflow:hidden;margin-top:4px}
   .bar>i{display:block;height:100%;background:var(--navy);border-radius:999px}
-  .green{color:var(--green)}.rose{color:var(--rose)}.amber{color:var(--amber)}
+  .green{color:var(--green)}.rose{color:var(--rose)}.amber{color:var(--amber)}.ink{color:var(--ink)}
   .banner{border:1px solid var(--line);border-left:4px solid var(--green);border-radius:12px;padding:10px 13px;font-size:13px;margin-top:12px;background:#fff}
   .flexr{display:flex;gap:8px;align-items:center}
   .stat{text-align:center}
@@ -56,6 +56,10 @@
   .tag{font-size:10px;border:1px solid var(--line);border-radius:999px;padding:1px 6px;margin-left:5px;vertical-align:middle}
   .hidden{display:none!important}
   .tabs{display:flex;gap:6px;margin-top:12px}
+  .jump{position:sticky;top:0;z-index:5;background:var(--soft);display:flex;gap:6px;overflow-x:auto;padding:8px 0 6px;scrollbar-width:none}
+  .jump::-webkit-scrollbar{display:none}
+  .jump button{flex:0 0 auto;border:1px solid var(--line);background:#fff;border-radius:99px;padding:6px 11px;font-size:13px;font-weight:600;color:var(--navy)}
+  .h2{scroll-margin-top:52px}
   .tab{flex:1;border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px;text-align:center;font-weight:700;font-size:14px;color:var(--muted)}
   .tab.on{background:var(--navy);color:#fff;border-color:var(--navy)}
   .final{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;margin-top:6px}
@@ -97,7 +101,16 @@
 
     <!-- MONEY TAB -->
     <div id="tab-money">
-      <div class="h2">Log money</div>
+      <nav class="jump" aria-label="jump to">
+        <button onclick="jumpTo('log-head')">✍️ Log</button>
+        <button onclick="jumpTo('glance-head')">👀 Glance</button>
+        <button onclick="jumpTo('have-head')">🏦 Accounts</button>
+        <button onclick="jumpTo('week-head')">🗓️ Week</button>
+        <button onclick="jumpTo('pots-head')">🎯 Goals</button>
+        <button onclick="jumpTo('weeks-head')">📊 Growth</button>
+        <button onclick="jumpTo('month-head')">📅 Month</button>
+      </nav>
+      <div class="h2" id="log-head">Log money</div>
       <div class="card">
         <div class="modes" id="modes"></div>
         <div class="chips" id="types"></div>
@@ -121,10 +134,11 @@
         <div id="log-msg" class="small green" style="margin-top:7px"></div>
       </div>
 
-      <div class="h2">At a glance <span id="freshness" class="muted" style="text-transform:none;letter-spacing:0"></span></div>
+      <div class="h2" id="glance-head">At a glance <span id="freshness" class="muted" style="text-transform:none;letter-spacing:0"></span></div>
       <div class="card">
         <div class="big" id="networth">—</div>
         <div class="small muted" style="text-align:center">net worth · Core FI <span id="corefi">—</span></div>
+        <div class="small muted hidden" id="owed" style="text-align:center;margin-top:4px"></div>
         <div id="goals" style="margin-top:10px"></div>
       </div>
 
@@ -137,10 +151,13 @@
       <div class="h2 hidden" id="plan-head">Coming up</div>
       <div class="card hidden" id="plan"></div>
 
-      <div class="h2 hidden" id="pots-head">Saving for</div>
+      <div class="h2 hidden" id="pots-head">Your goals, in order</div>
       <div class="card hidden" id="pots"></div>
 
-      <div class="h2">This month <span id="growth-since" class="muted" style="text-transform:none;letter-spacing:0"></span></div>
+      <div class="h2 hidden" id="weeks-head">How your money grows</div>
+      <div class="card hidden" id="weeks"></div>
+
+      <div class="h2" id="month-head">This month <span id="growth-since" class="muted" style="text-transform:none;letter-spacing:0"></span></div>
       <div class="card" id="growth-card">
         <div class="big" id="growth-now">—</div>
         <div class="small" id="growth-change" style="text-align:center"></div>
@@ -279,6 +296,12 @@ const r4 = (v) => Math.round((v + (v>=0?1e-9:-1e-9)) * 10000) / 10000
 function cfg(){ try { return JSON.parse(localStorage.getItem(LS.cfg)) } catch { return null } }
 function queue(){ try { return JSON.parse(localStorage.getItem(LS.queue)) || [] } catch { return [] } }
 function setQueue(q){ localStorage.setItem(LS.queue, JSON.stringify(q)); renderPending(); if (tab==='trading') renderTrading() }
+
+// the shortcut row: straight to a section, skipping any that has nothing to show yet
+window.jumpTo = (id) => {
+  const el = $(id)
+  if (el && !el.classList.contains('hidden')) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 window.showTab = (t) => {
   tab = t
@@ -732,9 +755,11 @@ function render(){
     const col = (v) => v===null||v===undefined ? 'var(--muted)' : v>0 ? 'var(--green)' : v<0 ? 'var(--rose)' : 'var(--muted)'
     const d = g.openDate ? `${g.openDate.slice(8)}.${g.openDate.slice(5,7)}` : ''
     $('growth-since').textContent = g.openDate ? (g.partial ? `· since you started ${d}` : `· since last month ${d}`) : ''
-    $('growth-now').textContent = euro(g.close)
-    $('growth-change').innerHTML = g.change===null||g.change===undefined ? ''
-      : `<b style="color:${col(g.change)};font-size:15px">${sgn(g.change)}</b>${g.pct!==null&&g.pct!==undefined?` <span class="muted">(${g.pct>0?'+':''}${g.pct.toFixed(1)}%)</span>`:''}`
+    // net worth itself is in "At a glance" — here the month's change is the headline
+    const noChange = g.change===null||g.change===undefined
+    $('growth-now').innerHTML = noChange ? euro(g.close) : `<span style="color:${col(g.change)}">${sgn(g.change)}</span>`
+    $('growth-change').innerHTML = noChange ? ''
+      : `<span class="muted">this month${g.pct!==null&&g.pct!==undefined?` · ${g.pct>0?'+':''}${g.pct.toFixed(1)}%`:''} · now ${euro(g.close)}</span>`
     // cash never moves by itself, so its leftover is shown as "not logged", not as growth
     const hasSplit = g.market!==null && g.market!==undefined
     $('growth-split').innerHTML = (g.byItself===null||g.byItself===undefined) ? ''
@@ -750,7 +775,9 @@ function render(){
   }
   renderWeek(s.week)
   renderPlan(s.plan)
-  renderPots(s.pots||[])
+  renderOwed(s.debts)
+  if (s.goalPlan) renderGoals(s.goalPlan, s.pots||[]); else renderPots(s.pots||[])
+  renderWeeks(s.weeks)
   const entries = s.monthEntries||[]
   $('entries').innerHTML = entries.length===0
     ? '<div class="small muted" style="padding:6px 2px">Nothing logged this month yet.</div>'
@@ -899,6 +926,97 @@ function renderPots(pots){
       <div class="small muted" style="margin-top:3px">${where || 'nothing set aside yet'}${p.left>0?` · ${euro(p.left)} to go`:' · done 🎉'}</div>
     </div>`
   }).join('') + `<div class="small muted">Recorded on the laptop each Sunday.</div>`
+}
+
+// ── 2.0: what she owes, under her net worth — the laptop's Have line ──
+function renderOwed(debts){
+  const el = $('owed')
+  if (!debts || !debts.length){ el.classList.add('hidden'); return }
+  el.classList.remove('hidden')
+  const day = (d) => d ? `${d.slice(8,10)}.${d.slice(5,7)}.${d.slice(0,4)}` : ''
+  el.innerHTML = debts.map(d => `💸 owed to <b class="ink">${d.name}</b> <b class="rose">${euro(d.owed)}</b> — taken off`
+    + (d.potName ? ` · ${euro(d.setAside)} set aside · <b class="ink">${euro(d.toSave)}</b> to save` : '')
+    + (d.due ? ` · by ${day(d.due)}` : '')).join('<br>')
+}
+
+// ── 2.0: her goals in her order — the laptop's Plan card, read-only ──
+// Each row says where its money sits too, so there is no second "Saving for" list saying it again.
+function renderGoals(gp, pots){
+  const head = $('pots-head'), card = $('pots')
+  const mindings = pots.filter(p => p.heldForOther)
+  if (!gp.goals.length && !mindings.length){ head.classList.add('hidden'); card.classList.add('hidden'); return }
+  head.classList.remove('hidden'); card.classList.remove('hidden')
+  const day = (d) => `${d.slice(8,10)}.${d.slice(5,7)}.${d.slice(0,4)}`
+  const mon = (d) => new Date(`${d.slice(0,7)}-15`).toLocaleString('en-GB', { month: 'short', year: 'numeric' })
+  const status = (g) => g.kind === 'reached' ? '<b class="green">reached ✓</b>'
+    : g.status === 'done' ? '<b class="green">done ✓</b>'
+    : g.status === 'on time' ? `<b class="green">on time ✓ · ${g.ready ? mon(g.ready) : ''}</b>`
+    : g.status === 'no date' ? `<span class="muted">${g.ready ? 'around ' + mon(g.ready) : ''}</span>`
+    : `<b class="amber">${g.monthsLate >= 120 ? 'not in 10 years' : `~${g.monthsLate} mo late · ${g.ready ? mon(g.ready) : ''}`}</b>`
+  const head2 = `<div class="small" style="margin-bottom:10px;line-height:1.45">In this order, every date takes about <b>${euro(gp.needed,0)}/month</b>.
+    You keep <b>${euro(gp.monthly,0)}</b> <span class="muted">(${gp.basis})</span>
+    ${gp.gap >= 0 ? `<b class="green">— enough ✓</b>` : `<b class="amber">— ${euro(-gp.gap,0)}/month short</b>`}</div>`
+  const rows = gp.goals.map((g, i) => {
+    const pct = g.target > 0 ? Math.min(1, g.have / g.target) : 1
+    const tone = g.status === 'late' ? 'var(--amber)' : (g.status === 'done' || g.status === 'on time' || g.kind === 'reached') ? 'var(--green)' : 'var(--navy)'
+    const where = (g.where || []).map(w => w.replace(/ (\d+\.\d\d)$/, (m, a) => ' ' + euro(Number(a)))).join(' · ')
+    return `<div style="margin-bottom:11px">
+      <div class="flexr" style="justify-content:space-between;gap:8px">
+        <b>${i + 1}. ${g.emoji||''} ${g.name}</b>
+        <span class="small" style="white-space:nowrap"><b>${euro(g.have,0)}</b> <span class="muted">of ${euro(g.target,0)}</span></span>
+      </div>
+      <div class="bar"><i style="width:${Math.round(pct*100)}%;background:${tone}"></i></div>
+      <div class="small muted flexr" style="justify-content:space-between;gap:8px;margin-top:3px;flex-wrap:wrap">
+        <span>${g.left > 0.005 ? euro(g.left,0) + ' to go' : 'reached'}${g.by ? ' · by ' + day(g.by) : ''}${where ? ' · ' + where : ''}</span>
+        <span>${status(g)}</span>
+      </div>
+    </div>`
+  }).join('')
+  const mind = mindings.map(p => `<div class="small muted" style="margin-top:4px">🔒 ${p.emoji||''} ${p.name} ${euro(p.saved)} — not mine, kept out of your net worth</div>`).join('')
+  card.innerHTML = head2 + rows + mind + `<div class="small muted" style="margin-top:6px">Order, reached, used or skipped — change them on the laptop (Plan).</div>`
+}
+
+// ── 2.0: her net worth week by week, account by account — Grow → Net worth, phone-sized ──
+function renderWeeks(weeks){
+  const head = $('weeks-head'), card = $('weeks')
+  if (!weeks || weeks.length < 2){ head.classList.add('hidden'); card.classList.add('hidden'); return }
+  head.classList.remove('hidden'); card.classList.remove('hidden')
+  const COL = { 'Cash': '#2f7a4f', 'Revolut': '#4a90c2', 'TR Cash': '#a13d5d', 'Trading': '#9b8ec4', 'Invested': '#1e3a5f' }
+  const OWED = '#d98b8b'
+  const names = ['Cash', 'Revolut', 'TR Cash', 'Trading', 'Invested']
+  const val = (w, n) => Math.max(0, (w.bands.find(b => b.name === n) || {}).value || 0)
+  const tops = weeks.map(w => names.reduce((s, n) => s + val(w, n), 0))
+  const owedMax = Math.max(0, ...weeks.map(w => w.owed))
+  const nice = (v) => { const m = 10 ** Math.floor(Math.log10(v)); for (const k of [1, 2, 2.5, 5, 10]) if (v <= k * m) return k * m; return 10 * m }
+  const step = nice(Math.max(1, ...tops) / 3)
+  const hi = step * Math.ceil(Math.max(1, ...tops) / step), lo = owedMax > 0 ? -step * Math.ceil(owedMax / step) : 0
+  const W = 340, H = 220, L = 34, R = 4, T = 18, B = 30
+  const y = (v) => T + (hi - v) / (hi - lo) * (H - T - B)
+  const cw = (W - L - R) / weeks.length, bw = Math.min(18, cw * 0.66)
+  const k = (v) => { const a = Math.abs(v); return (v < 0 ? '−' : '') + (a >= 1000 ? (a / 1000).toFixed(a >= 10000 ? 0 : 1) + 'k' : Math.round(a)) }
+  let svg = ''
+  for (let t = lo; t <= hi + 0.5; t += step) svg += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="${t === 0 ? '#7a8797' : '#dfe8f1'}" stroke-width="1"/><text x="${L - 4}" y="${y(t) + 3}" text-anchor="end" font-size="8.5" fill="#7a8797">${k(t)}</text>`
+  weeks.forEach((w, i) => {
+    const cx = L + i * cw + cw / 2
+    let run = 0
+    for (const n of names) {
+      const v = val(w, n); if (v <= 0.005) continue
+      svg += `<rect x="${cx - bw / 2}" y="${y(run + v)}" width="${bw}" height="${Math.max(0, y(run) - y(run + v))}" fill="${COL[n]}"/>`
+      run += v
+    }
+    if (w.owed > 0.005) svg += `<rect x="${cx - bw / 2}" y="${y(0)}" width="${bw}" height="${y(-w.owed) - y(0)}" fill="${OWED}"/>`
+    svg += `<line x1="${cx - bw / 2 - 2}" x2="${cx + bw / 2 + 2}" y1="${y(w.total)}" y2="${y(w.total)}" stroke="#1c2a3a" stroke-width="2"/>`
+    // every other week's label, and always the last — a phone has no room for thirteen
+    if (i % 2 === (weeks.length - 1) % 2) svg += `<text x="${cx}" y="${H - 16}" text-anchor="middle" font-size="8.5" fill="#7a8797" font-weight="${w.now ? 700 : 400}">${w.now ? 'now' : w.date.slice(8) + '.' + w.date.slice(5, 7)}</text>`
+  })
+  const first = weeks[0], last = weeks[weeks.length - 1], grew = last.total - first.total
+  card.innerHTML = `<div class="flexr" style="justify-content:space-between"><span class="small muted">net worth now</span><b>${euro(last.total)}</b></div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;margin-top:6px">${svg}</svg>
+    <div class="small muted" style="text-align:center">${names.filter(n => weeks.some(w => val(w, n) > 0.005)).map(n => `<span style="white-space:nowrap"><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${COL[n]};margin:0 3px 0 8px"></i>${n}</span> `).join('')}
+      <span style="white-space:nowrap"><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${OWED};margin:0 3px 0 8px"></i>owed</span>
+      <span style="white-space:nowrap"><i style="display:inline-block;width:12px;height:2px;background:#1c2a3a;margin:0 3px 3px 8px"></i>net worth</span></div>
+    <div class="small muted" style="text-align:center;margin-top:5px">Your own money above zero, what you owe below; the line is your net worth.
+      ${weeks.length} weeks · <b class="${grew >= 0 ? 'green' : 'rose'}">${grew >= 0 ? '+' : '−'}${euro(Math.abs(grew))}</b></div>`
 }
 
 // ── Where it went — the same two views as the laptop, off the same entries ──
