@@ -107,6 +107,7 @@
         <button onclick="jumpTo('have-head')">🏦 Accounts</button>
         <button onclick="jumpTo('week-head')">🗓️ Week</button>
         <button onclick="jumpTo('pots-head')">🎯 Goals</button>
+        <button onclick="jumpTo('trips-head')">✈️ Trips</button>
         <button onclick="jumpTo('weeks-head')">📊 Growth</button>
         <button onclick="jumpTo('month-head')">📅 Month</button>
       </nav>
@@ -114,6 +115,9 @@
       <div class="card">
         <div class="modes" id="modes"></div>
         <div class="chips" id="types"></div>
+        <div id="refund-row" class="hidden" style="margin-top:8px"><div class="small muted">Money back on what? <span style="opacity:.8">(a refund comes off what you spent — it is not income)</span></div><div class="chips" id="refund-of"></div><div class="small muted" style="margin-top:8px">Bought when?</div><div class="chips" id="refund-month"></div></div>
+        <div id="for-row" class="hidden" style="margin-top:8px"><div class="small muted">Who was it for?</div><div class="chips" id="for"></div></div>
+        <div id="asset-row" class="hidden" style="margin-top:8px"><div class="small muted">Which holding? <span style="opacity:.8">(something new: add it on the laptop)</span></div><div class="chips" id="asset"></div></div>
         <div class="flexr" style="margin-top:10px">
           <input id="amount" inputmode="decimal" placeholder="€ 0.00" style="font-size:18px;font-weight:700;flex:1" />
           <input id="date" type="date" style="width:150px" />
@@ -124,6 +128,7 @@
         </div>
         <div class="flexr hidden" id="gain-row" style="margin-top:8px">
           <input id="gain" inputmode="decimal" placeholder="± gain of this sale (optional — for tax)" style="flex:1" />
+          <label class="small" style="white-space:nowrap"><input type="checkbox" id="soldall" /> sold all of it</label>
         </div>
         <div class="flexr" style="margin-top:8px">
           <select id="account" style="flex:1"></select>
@@ -138,7 +143,6 @@
       <div class="card">
         <div class="big" id="networth">—</div>
         <div class="small muted" style="text-align:center">net worth · Core FI <span id="corefi">—</span></div>
-        <div class="small muted hidden" id="owed" style="text-align:center;margin-top:4px"></div>
         <div id="goals" style="margin-top:10px"></div>
       </div>
 
@@ -153,6 +157,9 @@
 
       <div class="h2 hidden" id="pots-head">Your goals, in order</div>
       <div class="card hidden" id="pots"></div>
+
+      <div class="h2 hidden" id="trips-head">Your trips</div>
+      <div class="card hidden" id="trips"></div>
 
       <div class="h2 hidden" id="weeks-head">How your money grows</div>
       <div class="card hidden" id="weeks"></div>
@@ -170,7 +177,10 @@
              somewhere. Two different numbers, and the space between them is the point. -->
         <div class="grid2" id="rates" style="margin-top:8px"></div>
         <div class="small muted" id="rate-gap" style="text-align:center;margin-top:6px"></div>
+        <div class="small muted" id="month-note" style="text-align:center;margin-top:6px"></div>
       </div>
+      <div class="h2 hidden" id="who-head">Who it was for</div>
+      <div class="card hidden" id="who"></div>
 
       <div class="h2">Entries this month</div>
       <div class="card" id="entries"></div>
@@ -251,15 +261,16 @@ let sb = null, snapshot = null, tab = 'money'
 const MODES = [
   { id:'out',      label:'Out (spent)', emoji:'💸', color:'var(--rose)',   types:['Rent','Groceries','Food/Drinks','Transport','Phone','Subscriptions','Personal Care','Household','Clothes','Entertainment','Travel','Other'] },
   { id:'in',       label:'In (received)', emoji:'💰', color:'var(--green)',  types:['Tip','Salary','Bonus','Freelance','Gift','Refund','Interest','Other'] },
-  { id:'invest',   label:'Invest',   emoji:'📈', color:'var(--blue)',   types:['DCA Buy','Extra Buy','Tactical Buy','Sell (DCA)','Sell (Hold)','Sell (Tactical)','Sell (Legacy)','Joint Contribution'] },
+  { id:'invest',   label:'Invest',   emoji:'📈', color:'var(--blue)',   types:['DCA Buy','Extra Buy','Tactical Buy','Sell','Joint Contribution'] },
   { id:'transfer', label:'Transfer', emoji:'↔️', color:'var(--violet)', types:['Transfer'] }
 ]
-const EMOJI = {'Rent':'🏠','Groceries':'🛒','Food/Drinks':'🍜','Transport':'🚌','Phone':'📱','Subscriptions':'🔁','Personal Care':'🧴','Household':'🧺','Clothes':'👕','Entertainment':'🎬','Travel':'✈️','Other':'📦','Salary':'💼','Freelance':'💻','Upwork':'🌐','Side':'✨','Tip':'💶','Bonus':'✨','Gift':'🎀','Refund':'↩️','Interest':'🏦','DCA Buy':'🌱','Extra Buy':'➕','Tactical Buy':'🎯','Sell (DCA)':'🌾','Sell (Hold)':'🔵','Sell (Tactical)':'🎯','Sell (Legacy)':'🍂','Joint Contribution':'🤝','Transfer':'↔️'}
+const EMOJI = {'Sell':'💰','Not logged':'❓','Rent':'🏠','Groceries':'🛒','Food/Drinks':'🍜','Transport':'🚌','Phone':'📱','Subscriptions':'🔁','Personal Care':'🧴','Household':'🧺','Clothes':'👕','Entertainment':'🎬','Travel':'✈️','Other':'📦','Salary':'💼','Freelance':'💻','Upwork':'🌐','Side':'✨','Tip':'💶','Bonus':'✨','Gift':'🎀','Refund':'↩️','Interest':'🏦','DCA Buy':'🌱','Extra Buy':'➕','Tactical Buy':'🎯','Sell (DCA)':'🌾','Sell (Hold)':'🔵','Sell (Tactical)':'🎯','Sell (Legacy)':'🍂','Joint Contribution':'🤝','Transfer':'↔️'}
 const FEE_TYPES = new Set(['Tip','Salary','Bonus','Freelance']) // earning sources — gross − optional fee = take-home
 // Side merged into Bonus and Upwork into Freelance — the retired names still read as income
 // on the laptop, so an entry logged before this update is never mistaken for a spend.
 const RETIRED_IN = new Set(['Side','Upwork'])
-const SELL_SET = new Set(['Sell (DCA)','Sell (Hold)','Sell (Tactical)','Sell (Legacy)']) // sells can carry their profit part, for tax time
+// one Sell chip: the stored type follows the holding's group (the laptop's rule); a sell can carry its profit part, for tax time
+const sellTypeFor = (grp) => grp==='Tactical' ? 'Sell (Tactical)' : grp==='Legacy' ? 'Sell (Legacy)' : grp==='Hold' ? 'Sell (Hold)' : 'Sell (DCA)'
 const BUY_SET = new Set(['DCA Buy','Extra Buy','Tactical Buy']) // money that changed shape, not money gone
 let ACCOUNTS = [], PARKING = [] // cash pots, and Scalable/Tagesgeld which only some modes offer
 
@@ -290,6 +301,8 @@ const localDate = (d = new Date()) => {
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`
 }
 const euro = (v,d=2) => (v<0?'−':'') + '€' + Math.abs(v).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+// spending a refund took below zero: that money came back, so it never reads as a minus (the laptop's spentEuro)
+const spentEuro = (v, d=2) => v < -0.005 ? `+${euro(-v,d)} back` : euro(Math.abs(v),d)
 const r2 = (v) => Math.round((v + (v>=0?1e-9:-1e-9)) * 100) / 100
 const r4 = (v) => Math.round((v + (v>=0?1e-9:-1e-9)) * 10000) / 10000
 
@@ -399,12 +412,50 @@ async function refresh(){
 }
 
 // ── money logging ──
+// who a spend was for — her, both, or her boyfriend (the same three as the laptop). A new spend
+// starts on her latest choice for that category: the phone's own memory first, then the laptop's.
+const FOR_LABEL = { me:'🙋‍♀️ me', both:'👫 both of us', partner:'🧑 him' }
+let forWhom = null
+// a refund: what it was money back on — the spending category it comes off (the laptop's rule)
+let refundOf = null
+const isRefundNow = () => mode.id==='in' && type==='Refund'
+const tagKey = () => isRefundNow() ? refundOf : type
+window.pickRefundOf = (c) => { refundOf = c; forWhom = null; renderModes() }
+// the month she bought it in: the refund comes off that month's spending (null = this month)
+let boughtIn = null
+const monthsBack = (n) => { const d = new Date(); return Array.from({length:n}, (_,i) => { const x = new Date(d.getFullYear(), d.getMonth()-i, 1); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}` }) }
+window.pickBought = (i) => { boughtIn = i===0 ? null : monthsBack(4)[i]; renderFor() }
+const forMemory = () => { try { return JSON.parse(localStorage.getItem('forWhom')||'{}') } catch { return {} } }
+const rememberFor = (t, w) => { try { localStorage.setItem('forWhom', JSON.stringify({ ...forMemory(), [t]: w })) } catch {} }
+const whoFor = (k) => forMemory()[k] || (snapshot?.who?.lastFor||{})[k] || (['Rent','Groceries','Household'].includes(k) ? 'both' : 'me')
+const whoNow = () => forWhom || whoFor(tagKey())
+window.pickFor = (w) => { forWhom = w; renderFor() }
+// a buy or a sale says which holding — without it the cash moved and the holding did not
+let assetPick = null
+const isAssetType = () => BUY_SET.has(type) || type==='Sell'
+const holdingNames = () => snapshot?.holdingNames || []
+window.pickAsset = (i) => { assetPick = holdingNames()[i].asset; renderModes() }
+function renderAsset(){
+  $('asset-row').classList.toggle('hidden', !isAssetType())
+  if (isAssetType()) $('asset').innerHTML = holdingNames().map((h,i) => `<button class="chip" onclick="pickAsset(${i})" style="${h.asset===assetPick?'background:#1c2a3a;border-color:#1c2a3a;color:#fff':''}">${h.asset}</button>`).join('') || '<span class="small muted">Your holdings appear here once the laptop has synced.</span>'
+}
+function renderFor(){
+  renderAsset()
+  $('refund-row').classList.toggle('hidden', !isRefundNow())
+  if (isRefundNow()) $('refund-of').innerHTML = MODES[0].types.map(c => `<button class="chip" onclick="pickRefundOf('${c}')" style="${c===refundOf?'background:#1c2a3a;border-color:#1c2a3a;color:#fff':''}">${EMOJI[c]||''} ${c}</button>`).join('')
+  if (isRefundNow()) $('refund-month').innerHTML = monthsBack(4).map((m,i) => `<button class="chip" onclick="pickBought(${i})" style="${(boughtIn||monthsBack(1)[0])===m?'background:#1c2a3a;border-color:#1c2a3a;color:#fff':''}">${i===0?'This month':new Date(`${m}-01T00:00:00`).toLocaleDateString('en-GB',{month:'long'})}</button>`).join('')
+  const on = (mode.id==='out' && !!type) || (isRefundNow() && !!refundOf)
+  $('for-row').classList.toggle('hidden', !on)
+  if (!on) return
+  const now = whoNow()
+  $('for').innerHTML = Object.keys(FOR_LABEL).map(w => `<button class="chip" onclick="pickFor('${w}')" style="${w===now?'background:#1c2a3a;border-color:#1c2a3a;color:#fff':''}">${FOR_LABEL[w]}</button>`).join('')
+}
 function renderModes(){
   $('modes').innerHTML = ''
   for (const m of MODES){
     const b = document.createElement('button'); b.className='mode'; b.innerHTML=`<span>${m.emoji}</span>${m.label}`
     if (m===mode){ b.style.background=m.color; b.style.color='#fff' }
-    b.onclick = () => { mode=m; type = m.id==='transfer'?'Transfer':null; renderModes() }
+    b.onclick = () => { mode=m; type = m.id==='transfer'?'Transfer':null; forWhom=null; refundOf=null; assetPick=null; renderModes() }
     $('modes').appendChild(b)
   }
   $('types').innerHTML=''
@@ -412,14 +463,15 @@ function renderModes(){
     for (const t of mode.types){
       const b=document.createElement('button'); b.className='chip'; b.textContent=`${EMOJI[t]||''} ${({'DCA Buy':'Sparplan buy','Extra Buy':'Extra buy','Tactical Buy':'Tactical buy'})[t]||t}`
       if (t===type){ b.style.background=mode.color; b.style.borderColor=mode.color; b.style.color='#fff' }
-      b.onclick = () => { type=t; renderModes() }; $('types').appendChild(b)
+      b.onclick = () => { type=t; forWhom=null; refundOf=null; assetPick=null; renderModes() }; $('types').appendChild(b)
     }
   }
+  renderFor()
   $('toAccount').classList.toggle('hidden', mode.id!=='transfer')
   $('fee-row').classList.toggle('hidden', !FEE_TYPES.has(type))
   if (!FEE_TYPES.has(type)) $('fee').value=''
-  $('gain-row').classList.toggle('hidden', !SELL_SET.has(type))
-  if (!SELL_SET.has(type)) $('gain').value=''
+  $('gain-row').classList.toggle('hidden', type!=='Sell')
+  if (type!=='Sell') $('gain').value=''
   renderAccountOptions() // transfer/invest can reach Scalable and Tagesgeld, the others can't
   validate()
 }
@@ -431,7 +483,7 @@ function feeNet(){
 }
 function gainVal(){
   const raw = ($('gain').value||'').trim()
-  if (raw==='' || !SELL_SET.has(type)) return null
+  if (raw==='' || type!=='Sell') return null
   const g = Number(raw.replace(',','.'))
   return Number.isFinite(g) ? r2(g) : NaN // NaN = typed but not a number → block
 }
@@ -440,7 +492,7 @@ function validate(){
   const amtOk = FEE_TYPES.has(type) ? (gross>0 && fee>=0 && net>0) : gross>0
   const g = gainVal()
   const gainOk = g===null || Number.isFinite(g)
-  const ok = type && amtOk && gainOk && $('account').value!=='' && (mode.id!=='transfer' || ($('toAccount').value!=='' && $('toAccount').value!==$('account').value))
+  const ok = type && amtOk && gainOk && (!isRefundNow() || !!refundOf) && (!isAssetType() || !!assetPick) && $('account').value!=='' && (mode.id!=='transfer' || ($('toAccount').value!=='' && $('toAccount').value!==$('account').value))
   $('logBtn').disabled = !ok
   $('fee-net').textContent = (FEE_TYPES.has(type) && fee>0 && net>0) ? `= ${euro(net)} take-home` : ''
 }
@@ -456,10 +508,15 @@ window.logIt = async () => {
   // the mode she pressed travels with the entry — 'Other' lives in both the earn and spend lists,
   // so letting the laptop infer it from the type turned a spend into income
   const dir = mode.id==='transfer' ? 'TRANSFER' : mode.id==='in' ? 'IN' : mode.id==='out' ? 'OUT' : undefined
-  const payload = { date:$('date').value, type, direction:dir, amount:amt, accountId:Number($('account').value),
-    categoryOrAsset:null, note:[feeNote,userNote].filter(Boolean).join(' · ')||null, toAccountId: mode.id==='transfer'?Number($('toAccount').value):null,
-    gain: (g!==null && Number.isFinite(g)) ? g : null }
-  $('amount').value=''; $('fee').value=''; $('gain').value=''; $('note').value=''; type = mode.id==='transfer'?'Transfer':null; renderModes()
+  const sold = holdingNames().find(h => h.asset===assetPick)
+  const payload = { date:$('date').value, type: type==='Sell' ? sellTypeFor(sold && sold.grp) : type, direction:dir, amount:amt, accountId:Number($('account').value),
+    categoryOrAsset: isRefundNow() ? refundOf : isAssetType() ? assetPick : null, countsIn: isRefundNow() ? boughtIn : null, note:[feeNote,userNote].filter(Boolean).join(' · ')||null, toAccountId: mode.id==='transfer'?Number($('toAccount').value):null,
+    gain: (g!==null && Number.isFinite(g)) ? g : null, forWhom: tagKey() ? whoNow() : null,
+    soldAll: type==='Sell' && $('soldall').checked }
+  // purchases set the next default; a refund's tag is about the returned thing only (as on the laptop)
+  if (mode.id==='out' && type) rememberFor(type, whoNow())
+  forWhom = null; refundOf = null; assetPick = null; boughtIn = null
+  $('amount').value=''; $('fee').value=''; $('gain').value=''; $('soldall').checked=false; $('note').value=''; type = mode.id==='transfer'?'Transfer':null; renderModes()
   enqueue({ kind:'txAdd', payload })
   $('log-msg').textContent = navigator.onLine ? 'Sent — the laptop applies it within ~20s. ✓' : 'Saved on the phone — sends when online. ✓'
   setTimeout(()=>{ $('log-msg').textContent='' }, 3500)
@@ -740,9 +797,15 @@ function render(){
   }
   const m = s.month||{}
   $('month').innerHTML = ['Income','Expenses','Invested'].map((l,i)=>{
-    const v=[m.income,m.expenses,m.invested][i]||0, c=['var(--green)','var(--rose)','var(--blue)'][i]
-    return `<div class="stat"><div class="l">${l}</div><div class="v" style="color:${c}">${euro(v)}</div></div>` }).join('')
+    const v=[m.income,m.expenses,m.invested][i]||0, c=['var(--green)',v<0?'var(--green)':'var(--rose)','var(--blue)'][i]
+    return `<div class="stat"><div class="l">${l}</div><div class="v" style="color:${c}">${spentEuro(v)}</div></div>` }).join('')
   renderRates(m)
+  // the laptop's two lines: a sale is money back to her cash, a refund is money back on spending
+  $('month-note').innerHTML = [
+    m.takenOut>0 ? `You also sold <b>${euro(m.takenOut)}</b> of investments. That money came back to your cash, so it is neither income nor spending.` : '',
+    m.refunded>0 ? `Expenses are after <b>${euro(m.refunded)}</b> you got back from refunds, which are not income.` : ''
+  ].filter(Boolean).join('<br>')
+  renderWho(s.who)
   renderBuckets(s.buckets)
   renderAllTime(s.allTime)
   // the same month view as the laptop's Home: money now vs the last count of last month
@@ -764,9 +827,7 @@ function render(){
     const hasSplit = g.market!==null && g.market!==undefined
     $('growth-split').innerHTML = (g.byItself===null||g.byItself===undefined) ? ''
       : hasSplit
-        ? `you put in <b class="ink">${sgn(g.moved)}</b> · market <b style="color:${col(g.market)}">${sgn(g.market)}</b>`
-          + ((g.unlogged!==null && g.unlogged!==undefined && g.unlogged!==0)
-            ? ` · <span class="amber">not logged <b>${sgn(g.unlogged)}</b></span>` : '')
+        ? `you put in <b class="ink">${sgn(r2((g.moved||0)+(g.unlogged||0)))}</b> · market <b style="color:${col(g.market)}">${sgn(g.market)}</b>`
         : `you put in <b class="ink">${sgn(g.moved)}</b> · grew by itself <b style="color:${col(g.byItself)}">${sgn(g.byItself)}</b>`
     const first = g.firstCounted || []
     $('growth-accounts').innerHTML = g.clean === false && first.length
@@ -775,8 +836,8 @@ function render(){
   }
   renderWeek(s.week)
   renderPlan(s.plan)
-  renderOwed(s.debts)
   if (s.goalPlan) renderGoals(s.goalPlan, s.pots||[]); else renderPots(s.pots||[])
+  renderTrips(s.trips, s.tripYears, s.tripsToSort)
   renderWeeks(s.weeks)
   const entries = s.monthEntries||[]
   const entryRow = (t) => {
@@ -789,9 +850,10 @@ function render(){
           : t.direction==='OUT' ? 'var(--rose)' : t.direction==='IN' ? 'var(--green)' : 'var(--violet)'
         const label = t.direction==='TRANSFER' ? `${t.account} → ${t.toAccount||'?'}` : (t.category ? `${t.type} · ${t.category}` : t.type)
         const emoji = EMOJI[t.category] || EMOJI[t.type] || ''
-        const note = t.note ? ` <span class="small muted">${t.note}</span>` : ''
+        const note = (t.note ? ` <span class="small muted">${t.note}</span>` : '') + (t.countsIn ? ` <span class="small muted">· counts in ${new Date(`${t.countsIn}-01T00:00:00`).toLocaleDateString('en-GB',{month:'long'})}</span>` : '')
+        const who = (t.forWhom ? ` <span class="small muted">· ${FOR_LABEL[t.forWhom]}</span>` : '') + (t.trip ? ` <span class="small muted">· ✈️ ${t.trip}</span>` : '')
         const gain = (t.gain!==null && t.gain!==undefined) ? ` <span class="small" style="color:${t.gain>=0?'var(--green)':'var(--rose)'};font-weight:700">gain ${t.gain>=0?'+':'−'}${euro(Math.abs(t.gain))}</span>` : ''
-        return `<div class="row"><span style="flex:1"><b>${emoji} ${label}</b>${gain}${note}<div class="small muted">${t.date} · ${t.account}</div></span>
+        return `<div class="row"><span style="flex:1"><b>${emoji} ${label}</b>${gain}${who}${note}<div class="small muted">${t.date} · ${t.account}</div></span>
           <b style="color:${color};white-space:nowrap">${sign}${euro(t.amount)}</b></div>`
       }
   // the five newest open; the rest fold away — the page is long and this list grows all month
@@ -878,14 +940,15 @@ function renderWeek(w){
       ${d.spent>0?`<i style="height:6px;width:${sp}%;background:var(--rose);border-radius:99px"></i>`:''}
       ${d.invested>0?`<i style="height:6px;width:${iv}%;background:var(--blue);border-radius:99px"></i>`:''}</span>`
   }
-  const right = d => d.spent>0||d.invested>0
-    ? [d.spent>0?`<b style="color:var(--rose)">−${euro(d.spent)}</b>`:'', d.invested>0?`<b style="color:var(--blue)">${euro(d.invested)} in</b>`:''].filter(Boolean).join(' · ')
+  // a day whose refunds were bigger than its spending has spent < 0 — money back, not a quiet day
+  const right = d => d.spent!==0||d.invested>0
+    ? [d.spent>0?`<b style="color:var(--rose)">−${euro(d.spent)}</b>`:d.spent<0?`<span class="muted">+${euro(-d.spent)} refunded</span>`:'', d.invested>0?`<b style="color:var(--blue)">${euro(d.invested)} in</b>`:''].filter(Boolean).join(' · ')
     : (d.earned>0 ? `<span class="muted">+${euro(d.earned)}</span>` : '<span class="muted">quiet</span>')
 
   card.innerHTML = `<div class="small muted" style="margin-bottom:8px">${dd(w.from)} → ${dd(w.to)}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div><div style="font-size:19px;font-weight:800;color:var(--green)">${euro(w.earned)}</div><div class="small muted">came in</div></div>
-      <div><div style="font-size:19px;font-weight:800;color:var(--rose)">${euro(w.spent)}</div><div class="small muted">spent — gone</div></div>
+      <div><div style="font-size:19px;font-weight:800;color:${w.spent<0?'var(--green)':'var(--rose)'}">${spentEuro(w.spent)}</div><div class="small muted">spent — gone</div></div>
       <div><div style="font-size:19px;font-weight:800;color:var(--blue)">${euro(w.invested)}</div><div class="small muted">invested — still yours</div></div>
       <div><div style="font-size:19px;font-weight:800;color:${w.kept<0?'var(--rose)':'var(--navy)'}">${euro(w.kept)}</div><div class="small muted">kept${w.keptNote?` · ${w.keptNote}`:''}</div></div>
     </div>
@@ -897,27 +960,55 @@ function renderWeek(w){
     </div>
     ${(w.byCategory||[]).length===0 ? '' : `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">
       <div class="small muted" style="margin-bottom:5px">What you spent it on</div>
-      ${w.byCategory.map(c => `<span class="chip-static">${EMOJI[c.key]||''} ${c.key} <b>${euro(c.amount)}</b></span>`).join(' ')}
+      ${w.byCategory.map(c => `<span class="chip-static">${EMOJI[c.key]||''} ${c.key} <b>${spentEuro(c.amount)}</b></span>`).join(' ')}
     </div>`}`
 }
 
 // What is already committed. Set up on the laptop; the phone only reads it.
 function renderPlan(p){
   const head = $('plan-head'), card = $('plan')
-  if (!p || !(p.due||[]).length){ head.classList.add('hidden'); card.classList.add('hidden'); return }
+  const bills = (p && p.bills) || []
+  if (!bills.length){ head.classList.add('hidden'); card.classList.add('hidden'); return }
   head.classList.remove('hidden'); card.classList.remove('hidden')
   const dd = iso => `${iso.slice(8)}.${iso.slice(5,7)}`
-  card.innerHTML = `${p.due.map(d => `<div class="row"><span>
-      <span class="muted small" style="display:inline-block;width:56px">${d.inDays===0?'today':d.inDays===1?'tomorrow':d.inDays+'d'}</span>
-      ${d.name}</span><b style="color:var(--rose)">${euro(d.amount)}</b></div>`).join('')}
-    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
+  const days = n => `${n} day${n===1?'':'s'}`
+  const when = b => b.state==='paid' ? `<span style="color:var(--green)">✓ paid${b.lastPaid?` ${dd(b.lastPaid)}`:''}</span> · next ${dd(b.nextDue)}`
+    : b.state==='late' ? `<span style="color:var(--rose);font-weight:700">${days(-b.inDays)} late</span>`
+    : (b.inDays===0 ? 'today' : b.inDays===1 ? 'tomorrow' : `in ${days(b.inDays)}`) + (b.state==='later' && b.lastPaid ? ` · last paid ${dd(b.lastPaid)}` : '')
+  const button = b => {
+    const key = `${b.id}|${b.dueOn}`
+    if (billsSent().includes(key)) return `<div class="small" style="color:var(--green);margin-top:4px">✓ sent, the laptop logs it soon</div>`
+    if (b.state!=='due' && b.state!=='late') return ''
+    if (b.accountId===null) return `<div class="small muted" style="margin-top:4px">Choose its account on the laptop to pay it here.</div>`
+    return `<button class="chip" style="margin-top:6px;background:var(--navy);border-color:var(--navy);color:#fff" onclick="payBill(${b.id})">${billArmed===key ? `Log ${euro(b.left)} from ${b.accountName}?` : '✓ I paid it'}</button>`
+  }
+  card.innerHTML = `${bills.map(b => `<div style="padding:7px 2px;border-bottom:1px solid var(--line)">
+      <div class="flexr" style="justify-content:space-between"><span><b>${b.name}</b> <span class="small muted">${dd(b.dueOn)}${b.accountName?` · ${b.accountName}`:''}</span></span>
+      <b style="color:${b.state==='paid'?'var(--muted)':'var(--rose)'};white-space:nowrap">${euro(b.state==='paid'?b.amount:b.left)}</b></div>
+      <div class="small muted">${when(b)}${b.state!=='paid' && b.left<b.amount?` · of ${euro(b.amount)}`:''}</div>${button(b)}</div>`).join('')}
+    <details style="margin-top:8px"><summary class="small" style="cursor:pointer;color:var(--blue);font-weight:600">What is spare after these</summary>
       <div class="row"><span class="small">Everyday cash</span><b>${euro(p.everydayCash)}</b></div>
       ${p.notMine>0?`<div class="row"><span class="small muted">− only holding</span><span class="muted">${euro(p.notMine)}</span></div>`:''}
       ${p.promised>0?`<div class="row"><span class="small muted">− promised to pots</span><span class="muted">${euro(p.promised)}</span></div>`:''}
-      <div class="row"><span class="small muted">− due in ${p.days} days</span><span class="muted">${euro(p.total)}</span></div>
+      <div class="row"><span class="small muted">− still to pay in ${p.days} days</span><span class="muted">${euro(p.total)}</span></div>
       <div class="row"><b>${p.short?'Short by':'Spare'}</b><b style="color:${p.short?'var(--rose)':'var(--green)'}">${euro(Math.abs(p.spare))}</b></div>
-    </div>
-    <div class="small muted" style="margin-top:6px">Set these up on the laptop — the phone only reads them.</div>`
+    </details>
+    <div class="small muted" style="margin-top:6px">Set these up on the laptop.</div>`
+}
+// "I paid it": goes through the same queue as anything she logs here. Two taps: a mistake is €1,000
+// in her log, and the phone has no undo. The laptop reads it as paid from the entry itself.
+let billArmed = null
+const billsSent = () => { try { return JSON.parse(localStorage.getItem('billsSent')||'[]') } catch { return [] } }
+window.payBill = (id) => {
+  const p = snapshot?.plan, b = ((p && p.bills) || []).find(x => x.id===id)
+  if (!b) return
+  const key = `${b.id}|${b.dueOn}`
+  if (billArmed!==key){ billArmed = key; renderPlan(p); return }
+  billArmed = null
+  enqueue({ kind:'txAdd', payload:{ date:localDate(), type:b.type, direction:'OUT', amount:b.left, accountId:b.accountId, categoryOrAsset:null,
+    note: b.name.toLowerCase()===b.type.toLowerCase() ? null : b.name, toAccountId:null, gain:null, forWhom:whoFor(b.type), soldAll:false } })
+  try { localStorage.setItem('billsSent', JSON.stringify([...billsSent(), key].slice(-24))) } catch {}
+  renderPlan(p)
 }
 
 // Saving pots — read-only here. A pot is a label on money she already has, so nothing on this
@@ -950,16 +1041,6 @@ function renderPots(pots){
 }
 
 // ── 2.0: what she owes, under her net worth — the laptop's Have line ──
-function renderOwed(debts){
-  const el = $('owed')
-  if (!debts || !debts.length){ el.classList.add('hidden'); return }
-  el.classList.remove('hidden')
-  const day = (d) => d ? `${d.slice(8,10)}.${d.slice(5,7)}.${d.slice(0,4)}` : ''
-  el.innerHTML = debts.map(d => `💸 owed to <b class="ink">${d.name}</b> <b class="rose">${euro(d.owed)}</b> — taken off`
-    + (d.potName ? ` · ${euro(d.setAside)} set aside · <b class="ink">${euro(d.toSave)}</b> to save` : '')
-    + (d.due ? ` · by ${day(d.due)}` : '')).join('<br>')
-}
-
 // ── 2.0: her goals in her order — the laptop's Plan card, read-only ──
 // Each row says where its money sits too, so there is no second "Saving for" list saying it again.
 function renderGoals(gp, pots){
@@ -998,46 +1079,115 @@ function renderGoals(gp, pots){
 }
 
 // ── 2.0: her net worth week by week, account by account — Grow → Net worth, phone-sized ──
+// The laptop's Grow → Net worth, phone-sized: net worth as one line (tap a week), then what the
+// picked week is made of — five groups in the same colours, what is still to pay back, and the total.
+const WEEK_GROUPS = [
+  { key: 'cash', label: 'Everyday cash', color: '#2a78d6', from: ['Cash', 'Revolut', 'TR Cash'] },
+  { key: 'savings', label: 'Savings (Tagesgeld, Vietnam)', color: '#eb6834', from: ['Tagesgeld', 'In Vietnam (parents)'] },
+  { key: 'invested', label: 'Invested', color: '#1baf7a', from: ['Invested'] },
+  { key: 'trading', label: 'Trading (Scalable)', color: '#eda100', from: ['Trading'] },
+  { key: 'joint', label: 'Joint (your half)', color: '#e87ba4', from: ['Joint'] }
+]
+let weeksData = null, weekPicked = null
+window.pickWeek = (i) => { weekPicked = i; renderWeeks(weeksData) }
 function renderWeeks(weeks){
   const head = $('weeks-head'), card = $('weeks')
   if (!weeks || weeks.length < 2){ head.classList.add('hidden'); card.classList.add('hidden'); return }
   head.classList.remove('hidden'); card.classList.remove('hidden')
-  const COL = { 'Cash': '#2f7a4f', 'Revolut': '#4a90c2', 'TR Cash': '#a13d5d', 'Tagesgeld': '#5f9e8f', 'Joint': '#c49a52', 'Trading': '#9b8ec4', 'Invested': '#1e3a5f' }
-  const OWED = '#d98b8b'
-  const names = ['Cash', 'Revolut', 'TR Cash', 'Tagesgeld', 'Joint', 'Trading', 'Invested']
-  const val = (w, n) => Math.max(0, (w.bands.find(b => b.name === n) || {}).value || 0)
-  const tops = weeks.map(w => names.reduce((s, n) => s + val(w, n), 0))
-  const owedMax = Math.max(0, ...weeks.map(w => w.owed))
-  const nice = (v) => { const m = 10 ** Math.floor(Math.log10(v)); for (const k of [1, 2, 2.5, 5, 10]) if (v <= k * m) return k * m; return 10 * m }
-  const step = nice(Math.max(1, ...tops) / 3)
-  const hi = step * Math.ceil(Math.max(1, ...tops) / step), lo = owedMax > 0 ? -step * Math.ceil(owedMax / step) : 0
-  const W = 340, H = 220, L = 34, R = 4, T = 18, B = 30
-  const y = (v) => T + (hi - v) / (hi - lo) * (H - T - B)
-  const cw = (W - L - R) / weeks.length, bw = Math.min(18, cw * 0.66)
-  const k = (v) => { const a = Math.abs(v); return (v < 0 ? '−' : '') + (a >= 1000 ? (a / 1000).toFixed(a >= 10000 ? 0 : 1) + 'k' : Math.round(a)) }
+  weeksData = weeks
+  const r2 = (n) => Math.round(n * 100) / 100
+  const day = (w) => w.now ? 'now' : w.date.slice(8) + '.' + w.date.slice(5, 7)
+  const signed = (v) => Math.abs(v) < 0.005 ? '±0' : (v > 0 ? '+' : '−') + euro(Math.abs(v))
+  const tone = (v) => Math.abs(v) < 0.005 ? 'muted' : v > 0 ? 'green' : 'rose'
+  const parts = (w) => {
+    const p = Object.fromEntries(WEEK_GROUPS.map(g => [g.key, 0]))
+    for (const b of w.bands) { const g = WEEK_GROUPS.find(g => g.from.includes(b.name)) || WEEK_GROUPS[0]; p[g.key] = r2(p[g.key] + b.value) }
+    return p
+  }
+  const last = weeks.length - 1, sel = weekPicked === null || weekPicked > last ? last : weekPicked
+  const first = weeks[0], now = weeks[last]
+
+  // ── the line ──
+  const W = 340, H = 170, L = 34, R = 10, T = 16, B = 22
+  const vals = weeks.map(w => w.total)
+  const nice = (v) => { const m = 10 ** Math.floor(Math.log10(Math.max(1, v))); for (const k of [1, 2, 2.5, 5, 10]) if (v <= k * m) return k * m; return 10 * m }
+  const step = nice((Math.max(...vals) - Math.min(0, ...vals)) / 3)
+  const lo = Math.min(0, Math.floor(Math.min(...vals) / step) * step), hi = Math.ceil(Math.max(...vals) / step) * step
+  const x = (i) => L + i / last * (W - L - R)
+  const y = (v) => T + (hi - v) / ((hi - lo) || 1) * (H - T - B)
+  const k = (v) => { const a = Math.abs(v); return (v < 0 ? '−' : '') + '€' + (a >= 1000 ? (a / 1000).toFixed(a % 1000 ? 1 : 0) + 'k' : Math.round(a)) }
   let svg = ''
-  for (let t = lo; t <= hi + 0.5; t += step) svg += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="${t === 0 ? '#7a8797' : '#dfe8f1'}" stroke-width="1"/><text x="${L - 4}" y="${y(t) + 3}" text-anchor="end" font-size="8.5" fill="#7a8797">${k(t)}</text>`
+  for (let t = lo; t <= hi + 0.5; t += step) svg += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="#dfe8f1" stroke-width="1"/><text x="${L - 4}" y="${y(t) + 3}" text-anchor="end" font-size="8.5" fill="#7a8797">${k(t)}</text>`
+  const path = weeks.map((w, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(w.total).toFixed(1)}`).join('')
+  svg += `<path d="${path}L${x(last)},${y(lo)}L${x(0)},${y(lo)}Z" fill="#1c2a3a" opacity="0.07"/>`
+  svg += `<path d="${path}" fill="none" stroke="#1c2a3a" stroke-width="2" stroke-linejoin="round"/>`
+  const every = Math.ceil(weeks.length / 5)
   weeks.forEach((w, i) => {
-    const cx = L + i * cw + cw / 2
-    let run = 0
-    for (const n of names) {
-      const v = val(w, n); if (v <= 0.005) continue
-      svg += `<rect x="${cx - bw / 2}" y="${y(run + v)}" width="${bw}" height="${Math.max(0, y(run) - y(run + v))}" fill="${COL[n]}"/>`
-      run += v
-    }
-    if (w.owed > 0.005) svg += `<rect x="${cx - bw / 2}" y="${y(0)}" width="${bw}" height="${y(-w.owed) - y(0)}" fill="${OWED}"/>`
-    svg += `<line x1="${cx - bw / 2 - 2}" x2="${cx + bw / 2 + 2}" y1="${y(w.total)}" y2="${y(w.total)}" stroke="#1c2a3a" stroke-width="2"/>`
-    // every other week's label, and always the last — a phone has no room for thirteen
-    if (i % 2 === (weeks.length - 1) % 2) svg += `<text x="${cx}" y="${H - 16}" text-anchor="middle" font-size="8.5" fill="#7a8797" font-weight="${w.now ? 700 : 400}">${w.now ? 'now' : w.date.slice(8) + '.' + w.date.slice(5, 7)}</text>`
+    svg += `<circle cx="${x(i)}" cy="${y(w.total)}" r="${i === sel ? 4.5 : 3}" fill="${i === sel ? '#1c2a3a' : '#fff'}" stroke="#1c2a3a" stroke-width="1.6"/>`
+    if (i % every === 0 || i === last) svg += `<text x="${x(i)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === last ? 'end' : 'middle'}" font-size="8.5" fill="#7a8797" font-weight="${i === last ? 700 : 400}">${day(w)}</text>`
   })
-  const first = weeks[0], last = weeks[weeks.length - 1], grew = last.total - first.total
-  card.innerHTML = `<div class="flexr" style="justify-content:space-between"><span class="small muted">net worth now</span><b>${euro(last.total)}</b></div>
+  svg += `<text x="${x(0)}" y="${y(first.total) - 8}" font-size="9.5" font-weight="700" fill="#1c2a3a">${k(first.total)}</text>`
+  svg += `<text x="${x(last)}" y="${y(now.total) - 8}" text-anchor="end" font-size="9.5" font-weight="700" fill="#1c2a3a">${k(now.total)}</text>`
+  // a tap target per week, wider than its dot
+  const cw = (W - L - R) / last
+  weeks.forEach((w, i) => { svg += `<rect x="${x(i) - cw / 2}" y="${T}" width="${cw}" height="${H - T - B}" fill="transparent" onclick="pickWeek(${i})"/>` })
+
+  // ── what the picked week is made of ──
+  const w = weeks[sel], prev = sel > 0 ? weeks[sel - 1] : null
+  const p = parts(w), pp = prev ? parts(prev) : null
+  const shown = WEEK_GROUPS.filter(g => Math.abs(p[g.key]) > 0.005)
+  const gross = shown.reduce((s, g) => s + Math.max(0, p[g.key]), 0) || 1
+  const bar = shown.map(g => `<span style="width:${Math.max(0, p[g.key]) / gross * 100}%;background:${g.color}"></span>`).join('')
+  const row = (label, v, d) => `<div class="flexr" style="justify-content:space-between;padding:4px 0;border-top:1px solid #eef2f6">${label}<span style="white-space:nowrap">${v}${d}</span></div>`
+  const ch = (d) => d === null ? '' : ` <span class="small ${tone(d)}" style="display:inline-block;min-width:76px;text-align:right">${signed(d)}</span>`
+  let rows = shown.map(g => row(`<span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${g.color};margin-right:6px"></i>${g.label}</span>`, euro(p[g.key]), ch(pp ? r2(p[g.key] - pp[g.key]) : null))).join('')
+  if (w.owed > 0.005) rows += row('<span class="muted">− still to pay back</span>', `<span class="rose">−${euro(w.owed)}</span>`, ch(prev ? r2(prev.owed - w.owed) : null))
+  rows += row('<b>= net worth</b>', `<b>${euro(w.total)}</b>`, ch(prev ? r2(w.total - prev.total) : null))
+
+  const since = r2(now.total - first.total), lastWeek = r2(now.total - weeks[last - 1].total)
+  card.innerHTML = `<div class="small muted">net worth now</div>
+    <div class="flexr" style="justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:4px">
+      <b style="font-size:24px">${euro(now.total)}</b>
+      <span class="small" style="text-align:right"><b class="${tone(lastWeek)}">${signed(lastWeek)}</b> <span class="muted">since ${day(weeks[last - 1])}</span><br>
+      <b class="${tone(since)}">${signed(since)}</b> <span class="muted">since ${day(first)} · ${weeks.length} weeks</span></span>
+    </div>
     <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;margin-top:6px">${svg}</svg>
-    <div class="small muted" style="text-align:center">${names.filter(n => weeks.some(w => val(w, n) > 0.005)).map(n => `<span style="white-space:nowrap"><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${COL[n]};margin:0 3px 0 8px"></i>${n}</span> `).join('')}
-      <span style="white-space:nowrap"><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${OWED};margin:0 3px 0 8px"></i>owed</span>
-      <span style="white-space:nowrap"><i style="display:inline-block;width:12px;height:2px;background:#1c2a3a;margin:0 3px 3px 8px"></i>net worth</span></div>
-    <div class="small muted" style="text-align:center;margin-top:5px">Your own money above zero, what you owe below; the line is your net worth.
-      ${weeks.length} weeks · <b class="${grew >= 0 ? 'green' : 'rose'}">${grew >= 0 ? '+' : '−'}${euro(Math.abs(grew))}</b></div>`
+    <div class="small muted" style="text-align:center">tap a week to look inside it</div>
+    <div class="flexr" style="justify-content:space-between;margin-top:10px"><b>What it is made of · ${day(w)}</b>${sel !== last ? `<span class="small" style="color:#2a78d6;cursor:pointer" onclick="pickWeek(null)">back to now</span>` : ''}</div>
+    <div style="display:flex;gap:2px;height:12px;border-radius:999px;overflow:hidden;margin:6px 0 4px">${bar}</div>
+    ${prev ? `<div class="small muted" style="text-align:right">since ${day(prev)}</div>` : ''}
+    ${rows}
+    <div class="small muted" style="margin-top:6px">Everyday cash leaves out what is set aside for Dad; the debt shows only what is still to save. Joint counts your half.</div>`
+}
+
+// The laptop's Spend → Who it was for: the month split for her / both / him, her own part and
+// what supporting him cost (his + half of both). Tagging older entries in bulk stays on the laptop.
+// The laptop's Spend → Trips: where she went and what it cost. A note like "Rome trip hotel" puts an entry on its trip.
+function renderTrips(trips, years, toSort){
+  const list = trips || []
+  $('trips-head').classList.toggle('hidden', !list.length); $('trips').classList.toggle('hidden', !list.length)
+  if (!list.length) return
+  const plural = (n, w) => `${n} ${w}${n===1?'':'s'}`
+  $('trips').innerHTML = (years||[]).map(y => `<div class="small"><b>${y.year}</b> <span class="muted">· ${plural(y.trips,'trip')} ·</span> <b>${euro(y.spent)}</b></div>`).join('')
+    + list.map(t => `<div class="row"><span><b>✈️ ${t.name}</b> <span class="small muted">${t.when}${t.budget!==null?` · budget ${euro(t.budget,0)}`:''}</span></span><b>${euro(t.spent)}</b></div>`).join('')
+    + (toSort > 0 ? `<div class="small muted" style="margin-top:6px">${plural(toSort,'Travel payment')} not on a trip yet: sort on the laptop, Spend → Trips.</div>` : '')
+}
+
+function renderWho(w){
+  const total = w ? w.me + w.both + w.partner + w.untagged : 0
+  $('who-head').classList.toggle('hidden', !(total > 0)); $('who').classList.toggle('hidden', !(total > 0))
+  if (!(total > 0)) return
+  const parts = [['me','#2a78d6'],['both','#1baf7a'],['partner','#e87ba4'],['untagged','#dfe8f1']]
+  // untagged below zero = refunds not tagged yet (money back) — listed, never drawn as a share
+  const label = { me:FOR_LABEL.me, both:FOR_LABEL.both, partner:FOR_LABEL.partner, untagged: w.untagged < 0 ? 'refunds not tagged' : 'not tagged' }
+  const barTotal = parts.reduce((s,[k]) => s + Math.max(0, w[k]), 0) || 1
+  $('who').innerHTML = `<div style="display:flex;gap:2px;height:12px;border-radius:999px;overflow:hidden">${parts.filter(([k])=>w[k]>0.005).map(([k,c])=>`<span style="width:${w[k]/barTotal*100}%;background:${c}"></span>`).join('')}</div>
+    ${parts.filter(([k])=>Math.abs(w[k])>0.005).map(([k,c])=>`<div class="flexr" style="justify-content:space-between;padding:4px 0;border-top:1px solid #eef2f6"><span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};margin-right:6px"></i>${label[k]}</span><b>${spentEuro(w[k])}</b></div>`).join('')}
+    <div class="grid2" style="margin-top:8px">
+      <div class="stat"><div class="l">Your own part</div><div class="v">${spentEuro(w.mine)}</div></div>
+      <div class="stat"><div class="l">Supporting him</div><div class="v" style="color:#c2507f">${spentEuro(w.his)}</div></div>
+    </div>
+    <div class="small muted" style="text-align:center;margin-top:4px">each counts half of “both of us”${w.untagged>0.005?` · <span class="amber">${euro(w.untagged)} not tagged yet</span>`:''}</div>`
 }
 
 // ── Where it went — the same two views as the laptop, off the same entries ──
@@ -1151,11 +1301,18 @@ function renderWhere(entries){
   whereEntries = entries || []
   const groups = new Map()
   for (const t of whereEntries){
-    if (t.direction!=='OUT' || !EXPENSE_SET.has(t.type)) continue // exactly what the month counts as spending
-    const outer = whereBy==='category' ? t.type : (t.account||'—')
-    const inner = whereBy==='category' ? (t.account||'—') : t.type
+    // exactly what the month counts as spending: a spend adds to its category, a refund (money back
+    // on something returned) takes off the category it was bought in — never income
+    const isRef = t.direction==='IN' && t.type==='Refund'
+    if (isRef && t.countsIn) continue // it comes off the month it was bought in, not this one
+    const isGap = t.type==='Not logged' // what a count found, money gone or money found (the laptop's rule)
+    if (!isRef && !isGap && (t.direction!=='OUT' || !EXPENSE_SET.has(t.type))) continue
+    const cat = isRef ? (EXPENSE_SET.has(t.category) ? t.category : 'Refunds (not sorted)') : t.type
+    const amt = isRef || (isGap && t.direction==='IN') ? -t.amount : t.amount
+    const outer = whereBy==='category' ? cat : (t.account||'—')
+    const inner = whereBy==='category' ? (t.account||'—') : cat
     const g = groups.get(outer) || new Map()
-    g.set(inner, (g.get(inner)||0) + t.amount)
+    g.set(inner, (g.get(inner)||0) + amt)
     groups.set(outer, g)
   }
   const rows = [...groups.entries()].map(([key, parts]) => ({
@@ -1167,8 +1324,9 @@ function renderWhere(entries){
   const head = $('where-head'), card = $('where')
   if (rows.length===0){ head.classList.add('hidden'); card.classList.add('hidden'); return }
   head.classList.remove('hidden'); card.classList.remove('hidden')
-  const max = rows[0].amount
+  const max = Math.max(0, ...rows.map(r => r.amount))
   const total = r2(rows.reduce((s,r)=>s+r.amount,0))
+  const refunded = r2(whereEntries.filter(t => t.direction==='IN' && t.type==='Refund' && !t.countsIn).reduce((s,t)=>s+t.amount,0))
   // the buckets sit above the bars, and only in category mode — "from which pot" is a different
   // question and a split by choice would say nothing about it
   const split = whereBy==='category' && bucketRows.length>0
@@ -1185,11 +1343,11 @@ function renderWhere(entries){
   const moved = [...routes.entries()].map(([k,v])=>({key:k, amount:r2(v)})).sort((a,b)=>b.amount-a.amount)
 
   card.innerHTML = split + rows.map(r => `<div style="margin-bottom:11px">
-      <div class="flexr" style="justify-content:space-between"><b>${EMOJI[r.key]||''} ${r.key}</b><b>${euro(r.amount)}</b></div>
-      <div class="bar"><i style="width:${max?Math.round(r.amount/max*100):0}%"></i></div>
-      <div class="small muted" style="margin-top:3px">${r.parts.map(p=>`${p.key} ${euro(p.amount)}`).join(' · ')}</div>
+      <div class="flexr" style="justify-content:space-between"><b>${EMOJI[r.key]||''} ${r.key}</b><b style="${r.amount<0?'color:var(--green)':''}">${spentEuro(r.amount)}</b></div>
+      <div class="bar"><i style="width:${max>0?Math.round(Math.max(0,r.amount)/max*100):0}%"></i></div>
+      <div class="small muted" style="margin-top:3px">${r.parts.map(p=>`${p.key} ${spentEuro(p.amount)}`).join(' · ')}</div>
     </div>`).join('')
-    + `<div class="row" style="border-top:1px solid var(--line);padding-top:8px"><span class="muted">Total spent</span><b>${euro(total)}</b></div>`
+    + `<div class="row" style="border-top:1px solid var(--line);padding-top:8px"><span class="muted">${total<0?`Total: ${euro(r2(total+refunded))} spent, ${euro(refunded)} back from refunds`:`Total spent${refunded>0?` (after ${euro(refunded)} back from refunds)`:''}`}</span><b style="${total<0?'color:var(--green)':''}">${spentEuro(total)}</b></div>`
     + (moved.length===0 ? '' : `<div class="small muted" style="margin-top:9px">Moved between your own pots — not spending:<br>`
         + moved.map(m=>`${m.key} <b class="ink">${euro(m.amount)}</b>`).join(' · ') + `</div>`)
 }
